@@ -16,8 +16,42 @@
     color:#c8b880; z-index:20;
   }
   .screen.active { display:flex; }
-  #start h1 { font-size:3.5rem; letter-spacing:0.4em; margin-bottom:0.5rem; }
-  #start p  { font-size:1rem; color:#8a7850; margin-bottom:2rem; font-family:'Crimson Text',serif; font-style:italic; }
+  #start h1 { font-size:3.5rem; letter-spacing:0.4em; margin-bottom:0.5rem; position:relative; z-index:2; }
+  #start p  { font-size:1rem; color:#8a7850; margin-bottom:2rem; font-family:'Crimson Text',serif; font-style:italic; position:relative; z-index:2; }
+  #start .hb-btn { position:relative; z-index:2; }
+  @keyframes callerTitlePulse {
+    0%   { opacity:0; }
+    25%  { opacity:0.82; }
+    75%  { opacity:0.82; }
+    100% { opacity:0; }
+  }
+  /* Mimic silhouette — behind text, slow fade in/out loop */
+  #title-caller {
+    position:absolute; top:2%; left:50%; transform:translateX(-50%);
+    width:22vmin; height:96%;
+    background:rgba(55,40,22,0.92);
+    clip-path: polygon(
+      43% 0%,  57% 0%,  60% 8%,  56% 13%,
+      72% 16%, 78% 16%, 78% 88%, 72% 88%, 72% 22%,
+      58% 22%, 58% 60%, 63% 66%, 63% 100%, 54% 100%,
+      50% 65%, 46% 100%, 37% 100%, 37% 66%, 42% 60%,
+      42% 22%, 28% 22%, 28% 88%, 22% 88%, 22% 16%,
+      28% 16%, 44% 13%, 40% 8%
+    );
+    filter:drop-shadow(0 0 14px rgba(18,10,3,0.7));
+    opacity:0; animation:callerTitlePulse 7s 1.2s infinite ease-in-out;
+    pointer-events:none; z-index:1;
+  }
+  /* Eyes — same pulse, slightly offset */
+  #title-caller-eyes {
+    position:absolute; top:calc(2% + 3.4vmin); left:50%;
+    transform:translateX(-50%); width:22vmin;
+    display:flex; justify-content:center; gap:2.4vmin;
+    opacity:0; animation:callerTitlePulse 7s 2.4s infinite ease-in-out;
+    pointer-events:none; z-index:1;
+  }
+  .tce { width:1vmin; height:1.2vmin; border-radius:50%; background:#d08010;
+         box-shadow:0 0 8px 4px rgba(200,110,0,0.7); }
   .hb-btn {
     background:none; border:1px solid #8a7850; color:#c8b880;
     font-family:'Special Elite',cursive; font-size:0.95rem;
@@ -127,6 +161,14 @@
   #cutscene-lines .cs-mid  { font-family:'Crimson Text',serif; font-style:italic; color:#a09070; font-size:1.05rem; }
   #cutscene-lines .cs-tag  { font-size:0.85rem; color:#8a6840; letter-spacing:0.3em; }
   #cutscene-continue { opacity:0; margin-top:2.5rem; animation:fadeUp 1s forwards; }
+  .skip-btn {
+    position:fixed; bottom:1.4rem; right:1.6rem;
+    background:none; border:1px solid rgba(120,100,60,0.45);
+    color:rgba(160,138,90,0.55); font-family:'Special Elite',serif;
+    font-size:0.7rem; letter-spacing:0.18em; padding:0.35rem 0.9rem;
+    cursor:pointer; transition:color 0.2s, border-color 0.2s;
+  }
+  .skip-btn:hover { color:rgba(210,185,110,0.9); border-color:rgba(180,150,70,0.7); }
 
   /* ── ENDING CUTSCENES ── */
   @keyframes morningCome { from{background:#000} to{background:#0b0d18} }
@@ -154,6 +196,8 @@
 <body>
 
 <div id="start" class="screen active">
+  <div id="title-caller"></div>
+  <div id="title-caller-eyes"><div class="tce"></div><div class="tce"></div></div>
   <h1>HOMEBOUND</h1>
   <p>You come home. The house is empty.</p>
   <button class="hb-btn" id="startBtn">ENTER</button>
@@ -189,6 +233,7 @@
 <div id="reveal" class="screen">
   <div id="reveal-lines"></div>
   <button class="hb-btn" id="reveal-continue" style="display:none">CONTINUE →</button>
+  <button class="skip-btn" id="skip-reveal">SKIP ›</button>
 </div>
 
 <!-- Final choice -->
@@ -210,6 +255,7 @@
     <div class="ecs-lines" id="ecs-obey-lines"></div>
     <button class="hb-btn ecs-continue" id="ecs-obey-btn" style="display:none">READ THE NOTE →</button>
   </div>
+  <button class="skip-btn" id="skip-ecs-obey">SKIP ›</button>
 </div>
 
 <!-- Ending cutscene — DISOBEY -->
@@ -218,6 +264,7 @@
     <div class="ecs-lines" id="ecs-disobey-lines"></div>
     <button class="hb-btn ecs-continue" id="ecs-disobey-btn" style="display:none">...</button>
   </div>
+  <button class="skip-btn" id="skip-ecs-disobey">SKIP ›</button>
 </div>
 
 <!-- Ending -->
@@ -234,6 +281,7 @@
     <div id="cutscene-lines"></div>
     <button class="hb-btn" id="cutscene-continue" style="display:none">I UNDERSTAND →</button>
   </div>
+  <button class="skip-btn" id="skip-cutscene">SKIP ›</button>
 </div>
 
 <button id="restart-btn" title="Restart from the beginning">↺ RESTART</button>
@@ -705,8 +753,6 @@ function showEndingCS(type){
   // ── Audio ──
   if(!ac) return;
   if(type==='obey'){
-    // Drone fades to nothing — silence settles
-    if(droneGain) droneGain.gain.linearRampToValueAtTime(0.0001, ac.currentTime+10);
     // Soft morning chime at the light-seeping moment
     setTimeout(()=>{
       tone(528,3.5,0.12,'sine'); tone(660,2.8,0.07,'sine',0.5);
@@ -727,10 +773,7 @@ function showEndingCS(type){
     setTimeout(()=>{ noise(4.0,0.30,18,70); },10000);
     setTimeout(()=>{ noise(4.0,0.50,15,55); },14500);
     setTimeout(()=>{ noise(4.0,0.70,12,45); },19000);
-    // Sudden silence at the lock-turns moment
-    setTimeout(()=>{
-      if(droneGain) droneGain.gain.linearRampToValueAtTime(0.0001,ac.currentTime+2);
-    },23000);
+    // Sudden silence at the lock-turns moment (audio already stops naturally)
   }
 }
 
@@ -763,6 +806,8 @@ document.getElementById('restart-btn').addEventListener('click',()=>{
 // ── START ────────────────────────────────────────────────────────────────────
 document.getElementById('startBtn').addEventListener('click',()=>{
   document.getElementById('start').classList.remove('active');
+  document.getElementById('title-caller').style.display='none';
+  document.getElementById('title-caller-eyes').style.display='none';
   loadState();
   // pointer lock only needed once player is inside
   if(gameState==='inside') canvas.requestPointerLock();
@@ -819,11 +864,24 @@ function showCutscene(){
   btn.style.animationDelay='14000ms';
   setTimeout(()=>{ btn.style.display='block'; },14000);
 }
-document.getElementById('cutscene-continue').addEventListener('click',()=>{
+function enterFromCutscene(){
   document.getElementById('cutscene').classList.remove('active');
-  gameState='inside';
-  canvas.requestPointerLock();
-  saveState();
+  gameState='inside'; canvas.requestPointerLock(); saveState();
+}
+document.getElementById('cutscene-continue').addEventListener('click',enterFromCutscene);
+document.getElementById('skip-cutscene').addEventListener('click',enterFromCutscene);
+
+document.getElementById('skip-reveal').addEventListener('click',()=>{
+  document.getElementById('reveal').classList.remove('active');
+  document.getElementById('choice').classList.add('active');
+});
+document.getElementById('skip-ecs-obey').addEventListener('click',()=>{
+  document.getElementById('ecs-obey').classList.remove('active');
+  showEnding(ENDING_OBEY);
+});
+document.getElementById('skip-ecs-disobey').addEventListener('click',()=>{
+  document.getElementById('ecs-disobey').classList.remove('active');
+  showEnding(ENDING_DISOBEY);
 });
 
 // ── TEXTURES ──────────────────────────────────────────────────────────────────
@@ -1314,7 +1372,6 @@ function renderScare(){
 function startEntering(){
   gameState='entering'; fadeAlpha=0;
   initAudio(); resumeAudio();
-  setTimeout(startDrone, 1400);
 }
 
 function renderOutside(ts){
@@ -1525,8 +1582,8 @@ function renderOutside(ts){
 }
 
 // ── AUDIO ────────────────────────────────────────────────────────────────────
-let ac=null, droneGain=null;
-let footTimer=0, heartTimer=0, heartInterval=1500;
+let ac=null;
+let footTimer=0, heartTimer=0, heartInterval=1500, sprintHeartTimer=0;
 let minimapOn=false;
 
 function initAudio(){
@@ -1562,18 +1619,6 @@ function noise(dur,vol=0.1,loFreq=200,hiFreq=1000,delay=0){
   src.start(ac.currentTime+delay);
 }
 
-function startDrone(){
-  if(!ac||droneGain)return;
-  droneGain=ac.createGain();
-  droneGain.gain.setValueAtTime(0,ac.currentTime);
-  droneGain.gain.linearRampToValueAtTime(0.45,ac.currentTime+4);
-  droneGain.connect(ac.destination);
-  [[55,0.30,'sawtooth'],[55.7,0.25,'sawtooth'],[110,0.18,'sine'],[27.5,0.22,'sine']].forEach(([f,v,t])=>{
-    const o=ac.createOscillator(), g=ac.createGain();
-    o.type=t; o.frequency.value=f; g.gain.value=v;
-    o.connect(g); g.connect(droneGain); o.start();
-  });
-}
 
 function playFootstep(){
   // Low thud + mid scuff — louder and more distinct
@@ -2105,11 +2150,20 @@ function loop(ts){
   if(controlsTimer>0) controlsTimer=Math.max(0,controlsTimer-dt);
   move(dt);
 
-  // footsteps
+  // footsteps + sprint heartbeat
   if(!inspectOpen&&!scareActive&&!notebookOpen){
     const moving=Math.abs(player.x-lastPX)>0.001||Math.abs(player.y-lastPY)>0.001;
+    const sprinting=(keys['ShiftLeft']||keys['ShiftRight'])&&moving&&!exhausted;
+    // Footsteps — faster cadence while sprinting
     footTimer=moving?footTimer+dt:0;
-    if(footTimer>400){playFootstep();footTimer=0;}
+    if(footTimer>(sprinting?240:400)){playFootstep();footTimer=0;}
+    // Sprint heartbeat — rapid beats only while sprinting
+    if(sprinting){
+      sprintHeartTimer+=dt;
+      if(sprintHeartTimer>320){playHeartbeat();sprintHeartTimer=0;}
+    } else {
+      sprintHeartTimer=0;
+    }
   }
 
   // heartbeat — always on inside, speeds up near threats
