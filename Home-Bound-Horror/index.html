@@ -1231,57 +1231,47 @@ function renderSprites(ts){
     if(ty>0.1){
       const sx=Math.floor(W/2*(1+tx/ty));
       const bodyH=Math.min(H-1,Math.abs(Math.floor(H/ty))*1.1)|0;
-      // Mimic = very thin stick figure
-      const bW=Math.max(3,Math.floor(bodyH*0.055));  // narrow body half-width
-      const legW=Math.max(2,Math.floor(bodyH*0.028)); // thin leg half-width
-      const aSpan=Math.max(6,Math.floor(bodyH*0.50)); // arm reach (long)
-      const aThk=Math.max(1,Math.floor(bodyH*0.022)); // wire-thin arms
+      // Same polygon as the title-screen CSS clip-path — [u,v] in 0..1 bbox space
+      const CP=[
+        [0.43,0.00],[0.57,0.00],[0.60,0.08],[0.56,0.13],
+        [0.72,0.16],[0.78,0.16],[0.78,0.88],[0.72,0.88],[0.72,0.22],
+        [0.58,0.22],[0.58,0.60],[0.63,0.66],[0.63,1.00],[0.54,1.00],
+        [0.50,0.65],[0.46,1.00],[0.37,1.00],[0.37,0.66],[0.42,0.60],
+        [0.42,0.22],[0.28,0.22],[0.28,0.88],[0.22,0.88],[0.22,0.16],
+        [0.28,0.16],[0.44,0.13],[0.40,0.08]
+      ];
+      const NP=CP.length;
+      const figW=Math.max(8,Math.floor(bodyH*0.36));
+      const bboxLeft=sx-figW*0.5;
       const topY=Math.floor((H-bodyH)/2);
       const fade=Math.min(1,callerTimer/350);
 
-      const scanL=Math.max(0,sx-aSpan-aThk);
-      const scanR=Math.min(W-1,sx+aSpan+aThk);
+      const scanL=Math.max(0,Math.floor(bboxLeft));
+      const scanR=Math.min(W-1,Math.floor(bboxLeft+figW));
 
       for(let ox=scanL;ox<=scanR;ox++){
         if(ty>=zBuf[ox])continue;
-        const px=ox-sx;
-        const apx=Math.abs(px);
-
+        const u=(ox-bboxLeft)/figW;
         for(let oy=Math.max(0,topY);oy<=Math.min(H-1,topY+bodyH);oy++){
-          const v=(oy-topY)/(bodyH||1);
-
-          // Thin body sections
-          const hw= v<0.09?bW*1.5:   // oval head (a bit wider than stick body)
-                    v<0.13?bW*0.45:  // thin neck
-                    v<0.21?bW*1.7:   // bony shoulder points
-                    v<0.65?bW:       // stick torso
-                    v<0.70?bW*0.7:0; // narrow hips gap
-
-          // Thin separated legs (gap between them)
-          const legGap=Math.max(2,bW*0.9);
-          const legL=v>=0.70&&px>=-(legGap+legW)&&px<=-legGap;
-          const legR=v>=0.70&&px>=legGap&&px<=(legGap+legW);
-
-          // Wire arms hanging from shoulders all the way down
-          const armL=v>=0.21&&v<0.94&&px>=-(aSpan+aThk)&&px<=-aSpan;
-          const armR=v>=0.21&&v<0.94&&px>=aSpan&&px<=(aSpan+aThk);
-
-          const inBody=hw>0&&apx<=hw;
-          if(!inBody&&!legL&&!legR&&!armL&&!armR)continue;
-
+          const v=(oy-topY)/bodyH;
+          // Even-odd point-in-polygon test
+          let ins=false;
+          for(let i=0,j=NP-1;i<NP;j=i++){
+            const xi=CP[i][0],yi=CP[i][1],xj=CP[j][0],yj=CP[j][1];
+            if(((yi>v)!==(yj>v))&&(u<(xj-xi)*(v-yi)/(yj-yi)+xi))ins=!ins;
+          }
+          if(!ins)continue;
           const idx=(oy*W+ox)*4;
-          // Bright white-gray so it reads clearly against dark walls
           buf[idx]  =Math.floor(185*fade);
           buf[idx+1]=Math.floor(178*fade);
           buf[idx+2]=Math.floor(195*fade);
           buf[idx+3]=255;
-
-          // Glowing amber eyes
-          if(v>0.02&&v<0.075){
+          // Amber eyes in head zone (u≈0.44 and 0.56, v 0.02–0.10)
+          if(v>0.02&&v<0.10){
             const ep=0.8+0.2*Math.sin(callerTimer*0.007);
-            if(Math.abs(px-bW*0.7)<bW*0.5||Math.abs(px+bW*0.7)<bW*0.5){
+            if(Math.abs(u-0.44)<0.05||Math.abs(u-0.56)<0.05){
               buf[idx]  =Math.floor(255*fade*ep);
-              buf[idx+1]=Math.floor(190*fade*ep);
+              buf[idx+1]=Math.floor(175*fade*ep);
               buf[idx+2]=Math.floor(20*fade*ep);
             }
           }
