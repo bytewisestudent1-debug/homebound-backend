@@ -1,0 +1,1647 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>HOMEBOUND</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:#000; display:flex; align-items:center; justify-content:center; height:100vh; overflow:hidden; }
+  #wrap { position:relative; line-height:0; }
+  #c  { cursor:none; display:block; image-rendering:auto; }
+  #oc { position:absolute; top:0; left:0; pointer-events:none; }
+  .screen {
+    position:fixed; inset:0; display:none; flex-direction:column;
+    align-items:center; justify-content:center;
+    background:rgba(0,0,0,0.93); font-family:'Special Elite',cursive;
+    color:#c8b880; z-index:20;
+  }
+  .screen.active { display:flex; }
+  #start h1 { font-size:3.5rem; letter-spacing:0.4em; margin-bottom:0.5rem; }
+  #start p  { font-size:1rem; color:#8a7850; margin-bottom:2rem; font-family:'Crimson Text',serif; font-style:italic; }
+  .hb-btn {
+    background:none; border:1px solid #8a7850; color:#c8b880;
+    font-family:'Special Elite',cursive; font-size:0.95rem;
+    padding:0.55rem 2rem; cursor:pointer; letter-spacing:0.15em;
+  }
+  .hb-btn:hover { border-color:#dcc060; color:#dcc060; }
+  #inspect-box {
+    border:1px solid #8a7850; padding:2.5rem 3rem;
+    max-width:400px; text-align:center; background:rgba(5,3,1,0.96);
+  }
+  #inspect-word {
+    font-size:2.4rem; color:#dcc060; letter-spacing:0.35em;
+    margin-bottom:1.2rem;
+  }
+  #inspect-flavor {
+    font-family:'Crimson Text',serif; font-style:italic;
+    color:#c8b880; line-height:1.7; margin-bottom:1.8rem; font-size:1.05rem;
+  }
+  #inspect-esc { font-size:0.7rem; color:#8a7850; margin-top:0.8rem; cursor:pointer; letter-spacing:0.1em; }
+  #inspect-esc:hover { color:#c8b880; }
+  #restart-btn {
+    position:fixed; bottom:14px; right:16px; z-index:30;
+    background:none; border:1px solid #3a2a18; color:#5a4a30;
+    font-family:'Special Elite',cursive; font-size:0.7rem;
+    padding:5px 10px; cursor:pointer; letter-spacing:0.12em;
+    transition:border-color 0.2s, color 0.2s;
+  }
+  #restart-btn:hover { border-color:#8a7850; color:#c8b880; }
+
+  /* ── NOTEBOOK ── */
+  #notebook { background:rgba(3,2,1,0.97); }
+  #nb-box { border:1px solid #5a4530; padding:2rem 2.5rem; max-width:680px; width:90%; }
+  #nb-title { font-size:1.4rem; letter-spacing:0.4em; color:#dcc060; margin-bottom:1.6rem; text-align:center; }
+  .nb-section-label { font-size:0.65rem; letter-spacing:0.25em; color:#5a4530; margin-bottom:0.6rem; }
+  #nb-found, #nb-sentence {
+    min-height:52px; display:flex; flex-wrap:wrap; gap:8px;
+    padding:0.7rem; border:1px solid #3a2510; margin-bottom:1.2rem;
+    background:rgba(0,0,0,0.4);
+  }
+  #nb-sentence { border-color:#6a5030; min-height:58px; }
+  .nb-chip {
+    font-family:'Special Elite',cursive; font-size:0.95rem;
+    padding:0.3rem 0.8rem; border:1px solid #8a7850; color:#dcc060;
+    background:rgba(20,12,3,0.9); cursor:pointer; letter-spacing:0.1em;
+    transition:border-color 0.15s, color 0.15s;
+  }
+  .nb-chip:hover { border-color:#dcc060; color:#f0d878; }
+  .nb-chip.placed { border-color:#6a5030; color:#c8b060; }
+  #nb-hint { font-family:'Crimson Text',serif; font-style:italic; color:#8a3030;
+    font-size:0.9rem; min-height:1.2rem; margin-bottom:1rem; text-align:center; }
+  #nb-actions { display:flex; gap:1rem; justify-content:center; }
+  #nb-clear { font-size:0.7rem; color:#5a4530; background:none; border:none; cursor:pointer; font-family:'Special Elite',cursive; letter-spacing:0.1em; }
+  #nb-clear:hover { color:#8a7850; }
+  #nb-esc { font-size:0.65rem; color:#3a2a18; margin-top:1rem; text-align:center; cursor:pointer; letter-spacing:0.1em; }
+  #nb-esc:hover { color:#8a7850; }
+
+  /* ── REVEAL ── */
+  #reveal { background:#000; flex-direction:column; gap:0; }
+  #reveal-lines { max-width:700px; text-align:center; }
+  #reveal-lines .r-line { opacity:0; animation:fadeUp 1s forwards; margin-bottom:1.4rem; }
+  #reveal-lines .r-big  { font-size:1.9rem; color:#dcc060; letter-spacing:0.15em; line-height:1.4; }
+  #reveal-lines .r-mid  { font-size:1.1rem; color:#c8b880; font-family:'Crimson Text',serif; font-style:italic; }
+  #reveal-lines .r-small{ font-size:0.85rem; color:#8a7850; font-family:'Crimson Text',serif; font-style:italic; }
+  #reveal-continue { opacity:0; margin-top:2.5rem; animation:fadeUp 1s forwards; }
+  @keyframes fadeUp { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:none} }
+
+  /* ── CHOICE ── */
+  #choice { background:rgba(0,0,0,0.97); }
+  #choice-box { max-width:600px; text-align:center; }
+  #choice-warning { font-size:1.5rem; color:#dcc060; letter-spacing:0.2em; margin-bottom:1.2rem; }
+  #choice-context { font-family:'Crimson Text',serif; font-style:italic; color:#c8b880;
+    font-size:1.05rem; line-height:1.8; margin-bottom:2.5rem; }
+  #choice-btns { display:flex; flex-direction:column; gap:1rem; align-items:center; }
+  #btn-obey   { border-color:#5a7850; color:#90b878; }
+  #btn-obey:hover { border-color:#90b878; color:#b0e098; }
+  #btn-disobey{ border-color:#7a3020; color:#c06050; }
+  #btn-disobey:hover { border-color:#c06050; color:#e08070; }
+
+  /* ── ENDING ── */
+  #ending { background:#000; }
+  #ending-box { max-width:600px; text-align:center; }
+  #ending-lines .e-line { opacity:0; animation:fadeUp 1.2s forwards; margin-bottom:1.1rem; }
+  #ending-lines .e-big  { font-size:1.3rem; color:#c8b880; }
+  #ending-lines .e-mid  { font-family:'Crimson Text',serif; font-style:italic; color:#8a7850; font-size:1rem; }
+  #ending-lines .e-tag  { font-size:0.75rem; color:#5a4530; letter-spacing:0.3em; margin-top:1rem; }
+  #ending-again { opacity:0; margin-top:2.5rem; animation:fadeUp 1s forwards; }
+
+  /* ── CUTSCENE ── */
+  #cutscene { background:#000; }
+  #cutscene-box { max-width:660px; text-align:center; }
+  #cutscene-lines .cs-line { opacity:0; animation:fadeUp 1s forwards; margin-bottom:1.5rem; }
+  #cutscene-lines .cs-big  { font-size:1.6rem; color:#c8b880; letter-spacing:0.1em; line-height:1.4; }
+  #cutscene-lines .cs-mid  { font-family:'Crimson Text',serif; font-style:italic; color:#a09070; font-size:1.05rem; }
+  #cutscene-lines .cs-tag  { font-size:0.85rem; color:#8a6840; letter-spacing:0.3em; }
+  #cutscene-continue { opacity:0; margin-top:2.5rem; animation:fadeUp 1s forwards; }
+</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Special+Elite&family=Crimson+Text:ital@0;1&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<div id="start" class="screen active">
+  <h1>HOMEBOUND</h1>
+  <p>You come home. The house is empty.</p>
+  <button class="hb-btn" id="startBtn">ENTER</button>
+</div>
+
+<div id="inspect" class="screen">
+  <div id="inspect-box">
+    <div id="inspect-word"></div>
+    <div id="inspect-flavor"></div>
+    <button class="hb-btn" id="takeBtn">TAKE THE WORD</button>
+    <div id="inspect-esc">[ ESC — leave it ]</div>
+  </div>
+</div>
+
+<!-- Notebook -->
+<div id="notebook" class="screen">
+  <div id="nb-box">
+    <div id="nb-title">YOUR NOTEBOOK</div>
+    <div class="nb-section-label">WORDS FOUND — click to place</div>
+    <div id="nb-found"></div>
+    <div class="nb-section-label">YOUR SENTENCE</div>
+    <div id="nb-sentence"></div>
+    <div id="nb-hint"></div>
+    <div id="nb-actions">
+      <button class="hb-btn" id="nb-submit">READ THE MESSAGE</button>
+      <button id="nb-clear">CLEAR</button>
+    </div>
+    <div id="nb-esc">[ ESC — close ]</div>
+  </div>
+</div>
+
+<!-- Sentence reveal -->
+<div id="reveal" class="screen">
+  <div id="reveal-lines"></div>
+  <button class="hb-btn" id="reveal-continue" style="display:none">CONTINUE →</button>
+</div>
+
+<!-- Final choice -->
+<div id="choice" class="screen">
+  <div id="choice-box">
+    <div id="choice-warning">"IF OUR VOICES CALL YOU — DO NOT ANSWER"</div>
+    <div id="choice-context">You hear them now.<br>From somewhere below.<br>Your mother's voice. Your father's voice.<br><br>They are calling your name.</div>
+    <div id="choice-btns">
+      <button class="hb-btn" id="btn-obey">OBEY THE WARNING</button>
+      <button class="hb-btn" id="btn-disobey">GO TOWARD THE VOICES</button>
+    </div>
+  </div>
+</div>
+
+<!-- Ending -->
+<div id="ending" class="screen">
+  <div id="ending-box">
+    <div id="ending-lines"></div>
+    <button class="hb-btn" id="ending-again" style="display:none">PLAY AGAIN</button>
+  </div>
+</div>
+
+<!-- Entry cutscene -->
+<div id="cutscene" class="screen">
+  <div id="cutscene-box">
+    <div id="cutscene-lines"></div>
+    <button class="hb-btn" id="cutscene-continue" style="display:none">I UNDERSTAND →</button>
+  </div>
+</div>
+
+<button id="restart-btn" title="Restart from the beginning">↺ RESTART</button>
+
+<div id="wrap">
+  <canvas id="c"></canvas>
+  <canvas id="oc"></canvas>
+</div>
+
+<script>
+// ── MAP  28×20  Giant Mansion ─────────────────────────────────────────────────
+// North wing (rows 1-6): Library | Master Bedroom | Bedroom 2 | Secret Room
+// Row 7: north-wing bottom walls with doorways
+// Row 8: main east-west hallway
+// Row 9: hallway/main dividing wall
+// Main floor (rows 10-14): Living Room | Entrance Hall | Dining Room
+// Row 15: main/south dividing wall
+// South wing (rows 16-18): Sitting Room | Basement Area | Kitchen
+const MAP_W = 28, MAP_H = 20;
+const MAP = [
+// Row  0 — outer top wall
+1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+// Row  1 — Library(1-6)|wall7|MasterBed(8-18)|wall19|Bed2(20-23)|SecretWall24|Secret(25-26)|wall27
+1,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,1,0,0,1,
+// Row  2 — col 24 OPEN = hidden passage into Secret Room
+1,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,1,
+// Row  3 — Library bookshelves (pillars at cols 3-4)
+1,0,0,1,1,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,1,0,0,1,
+// Row  4 — doors in dividing walls: col7 (Library↔Master) col19 (Master↔Bed2)
+1,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,1,
+// Row  5
+1,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,1,0,0,1,
+// Row  6
+1,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,1,0,0,1,
+// Row  7 — north-wing bottom walls; doors at col2(Library) col12(MasterBed) col21(Bed2)
+1,1,0,1,1,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,1,0,1,1,1,1,1,1,
+// Row  8 — MAIN EAST-WEST HALLWAY (fully open)
+1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
+// Row  9 — hallway/main-floor dividing wall; doors at col3 col11 col19
+1,1,1,0,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,1,
+// Row 10 — LivingRoom(1-8)|wall9|EntranceHall(10-17)|wall18|DiningRoom(19-26)|wall27
+1,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,1,
+// Row 11
+1,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,1,
+// Row 12 — door col9: LivingRoom↔EntranceHall
+1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,1,
+// Row 13 — door col18: EntranceHall↔DiningRoom
+1,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
+// Row 14
+1,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,1,
+// Row 15 — main/south dividing wall; doors at col4 col13 col22
+1,1,1,1,0,1,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,1,0,1,1,1,1,1,
+// Row 16 — SittingRoom(1-8)|wall9|BasementArea(10-17)|wall18|Kitchen(19-26)|wall27
+1,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,1,
+// Row 17 — door col9: SittingRoom↔BasementArea
+1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,1,
+// Row 18 — door col18: BasementArea↔Kitchen
+1,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
+// Row 19 — outer bottom wall
+1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+];
+function mapAt(x,y){
+  const xi=Math.floor(x),yi=Math.floor(y);
+  if(xi<0||xi>=MAP_W||yi<0||yi>=MAP_H)return 1;
+  return MAP[yi*MAP_W+xi];
+}
+
+// ── CLUES ────────────────────────────────────────────────────────────────────
+// Positions reflect the new mansion layout (MAP_W=28, MAP_H=20)
+const CLUES = [
+  {x:2.5,  y:4.5,  word:'IF',
+   flavor:"A journal lies open on the reading desk in the library. 'IF' is underlined seven times in frantic handwriting. The pen is still gripped in the crease."},
+  {x:13.5, y:2.5,  word:'OUR',
+   flavor:"Traced in the dust across the master bedroom mirror above the dresser. A finger wrote this. Recently."},
+  {x:25.5, y:4.0,  word:'VOICES',
+   flavor:"Written in ash on the floor of a hidden room behind the wall. The word is arranged in a perfect circle. You feel watched."},
+  {x:22.5, y:11.5, word:'CALL',
+   flavor:"Carved deep into the dining room table. Someone used a knife and kept carving. Plaster dust rings the word like a halo."},
+  {x:8.5,  y:8.5,  word:'YOU',
+   flavor:"Scratched into the wallpaper at eye level in the long upstairs hallway. The scratch is still white. Still fresh."},
+  {x:4.5,  y:17.5, word:'DO',
+   flavor:"A torn playing card propped against the sitting room armchair. The rest of the deck has been burned. Only this word survived."},
+  {x:22.5, y:17.5, word:'NOT',
+   flavor:"Burned into the kitchen wall above the stove. The wood still smells scorched. Someone stood here with a candle for a long time."},
+  {x:11.5, y:17.5, word:'ANSWER',
+   flavor:"Carved into the basement door frame with a key or a coin. Desperate letters. The last thing someone needed you to know."},
+];
+
+// ── SCARE ZONES ──────────────────────────────────────────────────────────────
+const SCARE_ZONES = [
+  {x:25.5,y:2.5, r:2.2},  // Secret Room — triggered when discovered
+  {x:13.5,y:18.5,r:1.5},  // Basement Area — near the final clue
+  {x:25.5,y:17.5,r:1.5},  // Kitchen dark corner
+  {x:3.5, y:8.5, r:1.5},  // West end of the long upstairs hallway
+];
+
+// ── KEY & SAFE ────────────────────────────────────────────────────────────────
+const KEY_ITEM = {x:5.5, y:2.5};   // hidden in the Library
+const SAFE_OBJ = {x:13.5, y:18.5}; // locked in the Basement Area
+
+// Pre-seeded crack paths (4 variants × 8 cracks × 5 segments)
+const CRACK_PATHS = Array.from({length:4},(_,v)=>
+  Array.from({length:8},(_,i)=>
+    Array.from({length:5},(_,s)=>({
+      t:(s+1)/5,
+      angle:(i/8)*Math.PI*2 + v*0.53 + Math.sin((v*100+i*17+s*11)*1.618)*0.30
+    }))
+  )
+);
+
+// ── CANVAS ───────────────────────────────────────────────────────────────────
+const W=800,H=500;
+const canvas=document.getElementById('c');
+const ctx=canvas.getContext('2d');
+canvas.width=W; canvas.height=H;
+const imgData=ctx.createImageData(W,H);
+const buf=imgData.data;
+const zBuf=new Float32Array(W);
+
+// Overlay canvas — drawn at full display resolution so text is sharp
+const oc=document.getElementById('oc');
+const oct=oc.getContext('2d');
+let DS=1; // display scale (game pixels → screen pixels)
+
+function setPixel(x,y,r,g,b){
+  const i=(y*W+x)*4; buf[i]=r;buf[i+1]=g;buf[i+2]=b;buf[i+3]=255;
+}
+function resize(){
+  DS=Math.min(innerWidth/W,innerHeight/H);
+  const dw=Math.floor(W*DS),dh=Math.floor(H*DS);
+  canvas.style.width=dw+'px'; canvas.style.height=dh+'px';
+  oc.width=dw; oc.height=dh;
+  oc.style.width=dw+'px'; oc.style.height=dh+'px';
+}
+resize(); addEventListener('resize',resize);
+
+// ── STATE ────────────────────────────────────────────────────────────────────
+const player={x:13.5,y:12.5,angle:Math.PI}; // Entrance Hall, facing north
+const MOVE_SPEED=0.04, ROT_SPEED=0.03, FOV=Math.PI/3;
+const CAM_PLANE=Math.tan(FOV/2);
+
+const keys={};
+let mouseX=0, pointerLocked=false;
+let lastTime=0, saveTimer=0;
+
+let foundWords=[], scaresFired=new Set();
+let selWords=[], sentenceDone=false, finalChoice=null;
+let notebookOpen=false, revealShown=false;
+let nearbyClue=null, inspectOpen=false, activeClue=null;
+const CORRECT_ORDER=['IF','OUR','VOICES','CALL','YOU','DO','NOT','ANSWER'];
+
+let scareActive=false, scareFrame=0, scareVariant=0;
+let scareCooldown=0, postScareRed=0;
+let flickerVal=1, whiteFlash=0;
+let stillTimer=0, lastPX=0, lastPY=0;
+
+// outside → entering → cutscene → inside state machine
+let gameState='outside';   // 'outside' | 'entering' | 'cutscene' | 'inside'
+let approachProgress=0;    // 0=far from door, 1=at door
+let fadeAlpha=0;
+let outsideTimer=0;
+
+// Key / safe / notebook progression
+let hasKey=false, safeUnlocked=false;
+let nearbyKey=false, nearbySafe=false;
+let hintMsg='', hintTimer=0;
+
+// ── INPUT ────────────────────────────────────────────────────────────────────
+addEventListener('keydown',e=>{
+  keys[e.code]=true;
+  if(e.code==='Escape'){
+    if(inspectOpen){closeInspect();return;}
+    if(notebookOpen){closeNotebook();return;}
+  }
+  if(e.code==='KeyE'){
+    if(gameState==='outside'&&approachProgress>=0.88){startEntering();return;}
+    if(gameState==='inside'&&!inspectOpen&&!scareActive&&!notebookOpen){
+      // Pick up key
+      if(nearbyKey&&!hasKey){
+        hasKey=true; whiteFlash=0.7; playWordChime(); saveState();
+        hintMsg='You found the key. Now find the safe in the basement.'; hintTimer=5000;
+        e.preventDefault(); return;
+      }
+      // Interact with safe
+      if(nearbySafe&&!safeUnlocked){
+        if(!hasKey){
+          hintMsg='It\'s locked. You need to find the key first.'; hintTimer=3000;
+        } else {
+          safeUnlocked=true; whiteFlash=0.9; playRevealChime(); saveState();
+          hintMsg='The safe opens. Inside — a worn notebook. The words are hidden somewhere in this house.'; hintTimer=6000;
+        }
+        e.preventDefault(); return;
+      }
+      // Inspect clue orb (only after notebook is found)
+      if(nearbyClue&&safeUnlocked){
+        openInspect(nearbyClue); e.preventDefault();
+      }
+    }
+  }
+  if(e.code==='KeyN'&&gameState==='inside'&&!inspectOpen&&!scareActive&&!sentenceDone){
+    if(!safeUnlocked){
+      hintMsg='You don\'t have the notebook yet. Find the safe first.'; hintTimer=3000;
+      e.preventDefault(); return;
+    }
+    notebookOpen?closeNotebook():openNotebook(); e.preventDefault();
+  }
+  if(e.code==='KeyM'&&gameState==='inside'){ minimapOn=!minimapOn; }
+});
+addEventListener('keyup',e=>{ keys[e.code]=false; });
+canvas.addEventListener('mousemove',e=>{ if(pointerLocked)mouseX+=e.movementX; });
+document.addEventListener('pointerlockchange',()=>{ pointerLocked=document.pointerLockElement===canvas; });
+canvas.addEventListener('click',()=>{ initAudio(); resumeAudio(); if(!inspectOpen&&!pointerLocked)canvas.requestPointerLock(); });
+
+// ── INSPECT MODAL ────────────────────────────────────────────────────────────
+function openInspect(clue){
+  inspectOpen=true; activeClue=clue;
+  document.exitPointerLock();
+  document.getElementById('inspect-word').textContent=clue.word;
+  document.getElementById('inspect-flavor').textContent=clue.flavor;
+  document.getElementById('inspect').classList.add('active');
+}
+function closeInspect(){
+  inspectOpen=false; activeClue=null;
+  document.getElementById('inspect').classList.remove('active');
+  canvas.requestPointerLock();
+}
+document.getElementById('takeBtn').addEventListener('click',()=>{
+  if(!activeClue)return;
+  foundWords.push(activeClue.word);
+  whiteFlash=1; playWordChime(); saveState(); closeInspect();
+});
+document.getElementById('inspect-esc').addEventListener('click',closeInspect);
+
+// ── NOTEBOOK ─────────────────────────────────────────────────────────────────
+function openNotebook(){
+  notebookOpen=true;
+  document.exitPointerLock();
+  document.getElementById('notebook').classList.add('active');
+  renderNotebook();
+}
+function closeNotebook(){
+  notebookOpen=false;
+  document.getElementById('notebook').classList.remove('active');
+  canvas.requestPointerLock();
+}
+function renderNotebook(){
+  const foundEl=document.getElementById('nb-found');
+  const sentEl=document.getElementById('nb-sentence');
+  const hint=document.getElementById('nb-hint');
+  foundEl.innerHTML=''; sentEl.innerHTML=''; hint.textContent='';
+
+  // Available words = found but not yet placed
+  const placed=new Set(selWords);
+  const available=foundWords.filter(w=>!placed.has(w)||selWords.filter(x=>x===w).length<foundWords.filter(x=>x===w).length);
+
+  // Build available pool properly (accounting for duplicates)
+  const pool=[...foundWords];
+  selWords.forEach(w=>{ const i=pool.indexOf(w); if(i>-1)pool.splice(i,1); });
+
+  pool.forEach(w=>{
+    const chip=document.createElement('div');
+    chip.className='nb-chip'; chip.textContent=w;
+    chip.onclick=()=>{ selWords.push(w); renderNotebook(); };
+    foundEl.appendChild(chip);
+  });
+
+  selWords.forEach((w,i)=>{
+    const chip=document.createElement('div');
+    chip.className='nb-chip placed'; chip.textContent=w;
+    chip.onclick=()=>{ selWords.splice(i,1); renderNotebook(); };
+    sentEl.appendChild(chip);
+  });
+
+  if(selWords.length===0){
+    sentEl.innerHTML='<span style="color:#3a2a18;font-size:0.8rem;align-self:center">click words above to arrange them</span>';
+  }
+}
+document.getElementById('nb-submit').addEventListener('click',()=>{
+  if(selWords.join(',')=== CORRECT_ORDER.join(',')){
+    sentenceDone=true; saveState();
+    closeNotebook(); showReveal();
+  } else {
+    const h=document.getElementById('nb-hint');
+    h.textContent=selWords.length<CORRECT_ORDER.length
+      ?'You need all 8 words to form the message.'
+      :'That\'s not the right order. Keep trying.';
+  }
+});
+document.getElementById('nb-clear').addEventListener('click',()=>{ selWords=[]; renderNotebook(); });
+document.getElementById('nb-esc').addEventListener('click',closeNotebook);
+
+// ── REVEAL ────────────────────────────────────────────────────────────────────
+function showReveal(){
+  document.exitPointerLock();
+  document.getElementById('reveal').classList.add('active');
+  playRevealChime();
+  const el=document.getElementById('reveal-lines');
+  el.innerHTML='';
+  const lines=[
+    {text:'"IF OUR VOICES CALL YOU"',cls:'r-big',delay:600},
+    {text:'"DO NOT ANSWER"',cls:'r-big',delay:2000},
+    {text:'Your parents knew what was coming.',cls:'r-mid',delay:4000},
+    {text:'They were trying to warn you.',cls:'r-mid',delay:5400},
+    {text:'Now you understand.',cls:'r-small',delay:6800},
+    {text:'And now you have a choice.',cls:'r-small',delay:7800},
+  ];
+  lines.forEach(({text,cls,delay})=>{
+    const p=document.createElement('p');
+    p.className=`r-line ${cls}`;
+    p.textContent=text;
+    p.style.animationDelay=delay+'ms';
+    el.appendChild(p);
+  });
+  const btn=document.getElementById('reveal-continue');
+  btn.style.display='none';
+  btn.style.animationDelay='9500ms';
+  setTimeout(()=>{ btn.style.display='block'; },9500);
+}
+document.getElementById('reveal-continue').addEventListener('click',()=>{
+  document.getElementById('reveal').classList.remove('active');
+  document.getElementById('choice').classList.add('active');
+});
+
+// ── CHOICE & ENDINGS ──────────────────────────────────────────────────────────
+const ENDING_OBEY=[
+  {text:'You sit in the hallway. You don\'t move.',cls:'e-big',delay:500},
+  {text:'The voices call your name again. And again.',cls:'e-mid',delay:2000},
+  {text:'Then silence.',cls:'e-mid',delay:3800},
+  {text:'Hours pass.',cls:'e-mid',delay:5200},
+  {text:'In the morning, you find a note on the kitchen counter.',cls:'e-mid',delay:6800},
+  {text:'"Good. Do not look for us. We are not what we were."',cls:'e-big',delay:8500},
+  {text:'You survive. Alone.',cls:'e-mid',delay:10500},
+  {text:'YOU OBEYED',cls:'e-tag',delay:12000},
+];
+const ENDING_DISOBEY=[
+  {text:'You walk to the basement door.',cls:'e-big',delay:500},
+  {text:'You open it.',cls:'e-big',delay:2000},
+  {text:'The voices grow louder. Warmer.',cls:'e-mid',delay:3500},
+  {text:'It sounds exactly like them.',cls:'e-mid',delay:5000},
+  {text:'You descend.',cls:'e-big',delay:6800},
+  {text:'The door closes behind you.',cls:'e-mid',delay:8200},
+  {text:'.',cls:'e-mid',delay:9800},
+  {text:'Three weeks later, a teenager comes home to find their family missing.',cls:'e-mid',delay:11500},
+  {text:'The cycle continues.',cls:'e-tag',delay:13500},
+];
+function showEnding(lines){
+  document.getElementById('choice').classList.remove('active');
+  document.getElementById('ending').classList.add('active');
+  const el=document.getElementById('ending-lines');
+  el.innerHTML='';
+  const lastDelay=lines[lines.length-1].delay;
+  lines.forEach(({text,cls,delay})=>{
+    const p=document.createElement('p');
+    p.className=`e-line ${cls}`; p.textContent=text;
+    p.style.animationDelay=delay+'ms';
+    el.appendChild(p);
+  });
+  const btn=document.getElementById('ending-again');
+  btn.style.display='none';
+  btn.style.animationDelay=(lastDelay+2000)+'ms';
+  setTimeout(()=>{ btn.style.display='block'; },lastDelay+2000);
+}
+document.getElementById('btn-obey').addEventListener('click',()=>{
+  finalChoice='obey'; saveState(); showEnding(ENDING_OBEY);
+});
+document.getElementById('btn-disobey').addEventListener('click',()=>{
+  finalChoice='disobey'; saveState(); showEnding(ENDING_DISOBEY);
+});
+document.getElementById('ending-again').addEventListener('click',()=>{
+  localStorage.removeItem('hb_save'); location.reload();
+});
+
+document.getElementById('restart-btn').addEventListener('click',()=>{
+  if(confirm('Restart from the beginning? All progress will be lost.')){
+    localStorage.removeItem('hb_save');
+    location.reload();
+  }
+});
+
+// ── START ────────────────────────────────────────────────────────────────────
+document.getElementById('startBtn').addEventListener('click',()=>{
+  document.getElementById('start').classList.remove('active');
+  loadState();
+  // pointer lock only needed once player is inside
+  if(gameState==='inside') canvas.requestPointerLock();
+  requestAnimationFrame(loop);
+});
+
+// ── SAVE / LOAD ───────────────────────────────────────────────────────────────
+function saveState(){
+  localStorage.setItem('hb_save',JSON.stringify({
+    px:player.x,py:player.y,angle:player.angle,
+    foundWords,selWords,sentenceDone,finalChoice,
+    scaresFired:[...scaresFired],gameState,
+    hasKey,safeUnlocked
+  }));
+}
+function loadState(){
+  try{
+    const s=JSON.parse(localStorage.getItem('hb_save'));
+    if(!s)return;
+    player.x=s.px??13.5; player.y=s.py??12.5; player.angle=s.angle??Math.PI;
+    foundWords=s.foundWords??[]; scaresFired=new Set(s.scaresFired??[]);
+    selWords=s.selWords??[]; sentenceDone=s.sentenceDone??false;
+    finalChoice=s.finalChoice??null;
+    hasKey=s.hasKey??false; safeUnlocked=s.safeUnlocked??false;
+    if(s.gameState==='inside'){ gameState='inside'; approachProgress=1; }
+  }catch{}
+}
+
+// ── CUTSCENE ──────────────────────────────────────────────────────────────────
+function showCutscene(){
+  gameState='cutscene';
+  document.getElementById('cutscene').classList.add('active');
+  document.exitPointerLock();
+  const el=document.getElementById('cutscene-lines');
+  el.innerHTML='';
+  const lines=[
+    {text:'Your family has suddenly disappeared.',cls:'cs-big',delay:500},
+    {text:'No warning. No note. No trace.',cls:'cs-mid',delay:2200},
+    {text:'But before they vanished — your parents left something behind.',cls:'cs-mid',delay:4000},
+    {text:'A safe. Hidden somewhere in this house.',cls:'cs-big',delay:6000},
+    {text:'Find the key.',cls:'cs-tag',delay:8000},
+    {text:'Unlock the safe.',cls:'cs-tag',delay:9200},
+    {text:'Take the notebook inside.',cls:'cs-tag',delay:10400},
+    {text:'Then find the words.',cls:'cs-mid',delay:11600},
+  ];
+  lines.forEach(({text,cls,delay})=>{
+    const p=document.createElement('p');
+    p.className=`cs-line ${cls}`; p.textContent=text;
+    p.style.animationDelay=delay+'ms';
+    el.appendChild(p);
+  });
+  const btn=document.getElementById('cutscene-continue');
+  btn.style.display='none';
+  btn.style.animationDelay='14000ms';
+  setTimeout(()=>{ btn.style.display='block'; },14000);
+}
+document.getElementById('cutscene-continue').addEventListener('click',()=>{
+  document.getElementById('cutscene').classList.remove('active');
+  gameState='inside';
+  canvas.requestPointerLock();
+  saveState();
+});
+
+// ── TEXTURES ──────────────────────────────────────────────────────────────────
+const TEX=64;
+const wallTex =new Uint8Array(TEX*TEX*3);
+const floorTex=new Uint8Array(TEX*TEX*3);
+const ceilTex =new Uint8Array(TEX*TEX*3);
+
+(function generateTextures(){
+  // Wall — dark stone brick
+  for(let ty=0;ty<TEX;ty++){
+    for(let tx=0;tx<TEX;tx++){
+      const bH=9,bW=15,row=~~(ty/bH),off=(row&1)*(bW>>1);
+      const bx=(tx+off)%bW,by=ty%bH;
+      const mortar=bx<1||by<1;
+      const h=Math.sin(tx*7.1+ty*13.3+row*29)*0.5+0.5;
+      const crack=Math.sin(tx*2.3+row*4.9)*Math.sin(ty*3.7+row*2.3)*0.5;
+      let r,g,b;
+      if(mortar){r=15;g=11;b=7;}
+      else{
+        r=~~(68+h*38+crack*12); g=~~(43+h*25+crack*8); b=~~(22+h*13+crack*4);
+      }
+      const i=(ty*TEX+tx)*3;
+      wallTex[i]=Math.max(0,Math.min(255,r));
+      wallTex[i+1]=Math.max(0,Math.min(255,g));
+      wallTex[i+2]=Math.max(0,Math.min(255,b));
+    }
+  }
+  // Floor — dark wood planks
+  for(let ty=0;ty<TEX;ty++){
+    for(let tx=0;tx<TEX;tx++){
+      const pW=12,pi=~~(tx/pW),px=tx%pW;
+      const seam=px<1;
+      const grain=Math.sin(tx*0.65+ty*0.08+pi*1.7)*0.14+Math.sin(tx*3.1+pi*6.3)*0.06;
+      const knot=Math.exp(-((tx-pi*pW-6)**2+(ty-32)**2)/80)*0.2;
+      let r,g,b;
+      if(seam){r=10;g=7;b=3;}
+      else{r=~~(50+(grain+knot)*30);g=~~(34+(grain+knot)*20);b=~~(16+(grain+knot)*10);}
+      const i=(ty*TEX+tx)*3;
+      floorTex[i]=Math.max(0,Math.min(255,r));
+      floorTex[i+1]=Math.max(0,Math.min(255,g));
+      floorTex[i+2]=Math.max(0,Math.min(255,b));
+    }
+  }
+  // Ceiling — dark cracked plaster
+  for(let ty=0;ty<TEX;ty++){
+    for(let tx=0;tx<TEX;tx++){
+      const n=Math.sin(tx*3.7+ty*5.1)*0.5+Math.sin(tx*7.3+ty*2.9)*0.25;
+      const r=~~(8+n*5),g=~~(6+n*4),b=~~(4+n*2);
+      const i=(ty*TEX+tx)*3;
+      ceilTex[i]=Math.max(0,r); ceilTex[i+1]=Math.max(0,g); ceilTex[i+2]=Math.max(0,b);
+    }
+  }
+})();
+
+// ── ROOM DETECTION ────────────────────────────────────────────────────────────
+// Returns a tint multiplier [r,g,b] based on which room the hit wall belongs to.
+// Rooms are identified by the grid cell just before the wall was hit.
+function roomTint(mx,my){
+  // North wing
+  if(my<=6){
+    if(mx<=7)  return [1.0,0.78,0.55]; // Library  — warm amber
+    if(mx<=19) return [0.70,0.80,1.0]; // Master Bedroom — cool moonlight blue
+    if(mx<=23) return [0.85,0.72,0.90]; // Bedroom 2 — faint lavender
+    return [0.55,0.70,0.55];           // Secret Room — sickly green
+  }
+  if(my===7||my===8||my===9) return [0.75,0.75,0.75]; // Hallway — grey stone
+  // Main floor
+  if(my<=14){
+    if(mx<=8)  return [1.0,0.82,0.60]; // Living Room — warm
+    if(mx<=17) return [0.90,0.85,0.75]; // Entrance Hall — neutral aged plaster
+    return [0.72,0.62,0.50];           // Dining Room — dark mahogany
+  }
+  // South wing
+  if(mx<=8)  return [0.80,0.78,0.68]; // Sitting Room
+  if(mx<=17) return [0.45,0.45,0.48]; // Basement Area — cold grey-blue
+  return [0.60,0.52,0.40];            // Kitchen — dark stone
+}
+
+function currentRoom(){
+  const px=player.x,py=player.y;
+  if(py<7){
+    if(px<7)   return 'LIBRARY';
+    if(px<19)  return 'MASTER BEDROOM';
+    if(px<24)  return 'BEDROOM';
+    return '???';
+  }
+  if(py<9) return 'UPPER HALLWAY';
+  if(py<10) return '';
+  if(py<15){
+    if(px<9)   return 'LIVING ROOM';
+    if(px<18)  return 'ENTRANCE HALL';
+    return 'DINING ROOM';
+  }
+  if(py<16) return '';
+  if(px<9)   return 'SITTING ROOM';
+  if(px<18)  return 'BASEMENT';
+  return 'KITCHEN';
+}
+
+// ── DDA RAYCASTER ─────────────────────────────────────────────────────────────
+function castRay(angle){
+  const rx=Math.cos(angle)||1e-10, ry=Math.sin(angle)||1e-10;
+  let mx=~~player.x, my=~~player.y;
+  const dDx=Math.abs(1/rx), dDy=Math.abs(1/ry);
+  let stepX,stepY,sdx,sdy;
+  if(rx<0){stepX=-1;sdx=(player.x-mx)*dDx;}else{stepX=1;sdx=(mx+1-player.x)*dDx;}
+  if(ry<0){stepY=-1;sdy=(player.y-my)*dDy;}else{stepY=1;sdy=(my+1-player.y)*dDy;}
+  let side=0,dist=0;
+  for(let i=0;i<64;i++){
+    if(sdx<sdy){sdx+=dDx;mx+=stepX;side=0;}else{sdy+=dDy;my+=stepY;side=1;}
+    if(mapAt(mx,my)){dist=side===0?sdx-dDx:sdy-dDy;break;}
+  }
+  let wallX=side===0?player.y+dist*ry:player.x+dist*rx;
+  wallX-=~~wallX;
+  return{dist,side,wallX,mx,my};
+}
+
+function renderWalls(ts){
+  flickerVal=0.93+0.07*(0.5+0.5*Math.sin(ts*0.007+Math.random()*0.4));
+  const dirX=Math.cos(player.angle),dirY=Math.sin(player.angle);
+  const plX=-dirY*CAM_PLANE,plY=dirX*CAM_PLANE;
+  const halfH=H>>1;
+
+  // ── ceiling (perspective-correct texture) ──
+  for(let y=0;y<halfH;y++){
+    const rowD=halfH/(halfH-y+0.001);
+    const fb=Math.max(0,Math.min(1,(1-y/halfH)*0.6+0.05));
+    const fx0=player.x+rowD*(dirX-plX), fy0=player.y+rowD*(dirY-plY);
+    const fsx=2*plX*rowD/W, fsy=2*plY*rowD/W;
+    let fxi=~~(fx0*TEX*256),fyi=~~(fy0*TEX*256);
+    const fsxi=~~(fsx*TEX*256),fsyi=~~(fsy*TEX*256);
+    for(let x=0;x<W;x++){
+      const ctx2=(fxi>>8)&(TEX-1),cty=(fyi>>8)&(TEX-1);
+      const ti=(cty*TEX+ctx2)*3;
+      setPixel(x,y,~~(ceilTex[ti]*fb),~~(ceilTex[ti+1]*fb),~~(ceilTex[ti+2]*fb));
+      fxi+=fsxi;fyi+=fsyi;
+    }
+  }
+
+  // ── floor (perspective-correct texture) ──
+  for(let y=halfH;y<H;y++){
+    const rowD=halfH/(y-halfH+0.001);
+    const fb=Math.max(0,Math.min(1,rowD/7));
+    const fx0=player.x+rowD*(dirX-plX),fy0=player.y+rowD*(dirY-plY);
+    const fsx=2*plX*rowD/W,fsy=2*plY*rowD/W;
+    let fxi=~~(fx0*TEX*256),fyi=~~(fy0*TEX*256);
+    const fsxi=~~(fsx*TEX*256),fsyi=~~(fsy*TEX*256);
+    for(let x=0;x<W;x++){
+      const ftx=(fxi>>8)&(TEX-1),fty=(fyi>>8)&(TEX-1);
+      const ti=(fty*TEX+ftx)*3;
+      setPixel(x,y,~~(floorTex[ti]*fb),~~(floorTex[ti+1]*fb),~~(floorTex[ti+2]*fb));
+      fxi+=fsxi;fyi+=fsyi;
+    }
+  }
+
+  // ── walls (textured columns with per-room tinting) ──
+  for(let x=0;x<W;x++){
+    const{dist,side,wallX,mx,my}=castRay(player.angle-FOV/2+(x/W)*FOV);
+    zBuf[x]=dist;
+    const lineH=Math.min(H,~~(H/(dist||0.001)));
+    const top=(H-lineH)>>1,bot=top+lineH;
+    const texX=(~~(wallX*TEX))&(TEX-1);
+    const dim=side===1?0.58:1.0;
+    const br=Math.max(0,Math.min(1,(1-dist/20)*flickerVal*dim));
+    const texCol=texX*3;
+    const[tr,tg,tb]=roomTint(mx,my);
+    for(let y=top;y<bot;y++){
+      const texY=(~~((y-top)/lineH*TEX))&(TEX-1);
+      const ti=texY*TEX*3+texCol;
+      setPixel(x,y,~~(wallTex[ti]*br*tr),~~(wallTex[ti+1]*br*tg),~~(wallTex[ti+2]*br*tb));
+    }
+  }
+
+  // ── film grain ──
+  for(let i=0;i<buf.length-3;i+=4){
+    const g=(Math.random()-0.5)*20;
+    buf[i]  =Math.max(0,Math.min(255,buf[i]  +g));
+    buf[i+1]=Math.max(0,Math.min(255,buf[i+1]+g));
+    buf[i+2]=Math.max(0,Math.min(255,buf[i+2]+g));
+  }
+}
+
+// ── SPRITE / ORB RENDERING ───────────────────────────────────────────────────
+function projectSprite(wx,wy){
+  const dirX=Math.cos(player.angle),dirY=Math.sin(player.angle);
+  const plX=-dirY*CAM_PLANE,plY=dirX*CAM_PLANE;
+  const inv=1/(plX*dirY-dirX*plY);
+  const dx=wx-player.x,dy=wy-player.y;
+  const tx=inv*(dirY*dx-dirX*dy);
+  const ty=inv*(-plY*dx+plX*dy);
+  return{tx,ty,sq:dx*dx+dy*dy};
+}
+
+function renderSprites(ts){
+  const labels=[];
+
+  // ── Word orbs (only visible after notebook found in safe) ──
+  if(safeUnlocked){
+    const sorted=CLUES
+      .filter(c=>!foundWords.includes(c.word))
+      .map(c=>{const{tx,ty,sq}=projectSprite(c.x,c.y);return{c,tx,ty,sq};})
+      .sort((a,b)=>b.sq-a.sq);
+
+    for(const{c,tx,ty,sq}of sorted){
+      if(ty<=0.15)continue;
+      const sx=Math.floor(W/2*(1+tx/ty));
+      const sz=Math.abs(Math.floor(H/ty));
+      const half=sz>>1;
+      const bob=Math.floor(Math.sin(ts*0.002)*Math.min(8,sz*0.12));
+      const csy=(H>>1)+bob;
+      const x0=Math.max(0,sx-half),x1=Math.min(W-1,sx+half);
+      const y0=Math.max(0,csy-half),y1=Math.min(H-1,csy+half);
+      for(let ox=x0;ox<=x1;ox++){
+        if(ty>=zBuf[ox])continue;
+        const u=(ox-(sx-half))/sz-0.5;
+        for(let oy=y0;oy<=y1;oy++){
+          const v=(oy-(csy-half))/sz-0.5;
+          const r=Math.sqrt(u*u+v*v);
+          if(r>0.48)continue;
+          const idx=(oy*W+ox)*4;
+          if(r>0.33){
+            const g=(0.48-r)/0.15;
+            buf[idx]  =Math.min(255,buf[idx]  +Math.floor(200*g));
+            buf[idx+1]=Math.min(255,buf[idx+1]+Math.floor(110*g));
+            buf[idx+2]=Math.min(255,buf[idx+2]+Math.floor(15*g));
+          }else{
+            const p=0.87+0.13*Math.sin(ts*0.003);
+            buf[idx]=Math.floor(220*p);buf[idx+1]=Math.floor(178*p);
+            buf[idx+2]=Math.floor(55*p);buf[idx+3]=255;
+          }
+        }
+      }
+      if(Math.sqrt(sq)<14)labels.push({word:c.word,sx,csy,sz,kind:'word'});
+    }
+  }
+
+  // ── KEY item (bright white-gold star, smaller) ──
+  if(!hasKey){
+    const{tx,ty,sq}=projectSprite(KEY_ITEM.x,KEY_ITEM.y);
+    if(ty>0.15){
+      const sx=Math.floor(W/2*(1+tx/ty));
+      const sz=Math.max(8,Math.abs(Math.floor(H/ty))*0.55)|0;
+      const half=sz>>1;
+      const bob=Math.floor(Math.sin(ts*0.004)*Math.min(6,sz*0.18));
+      const csy=(H>>1)+bob;
+      const x0=Math.max(0,sx-half),x1=Math.min(W-1,sx+half);
+      const y0=Math.max(0,csy-half),y1=Math.min(H-1,csy+half);
+      const pulse=0.75+0.25*Math.sin(ts*0.005);
+      for(let ox=x0;ox<=x1;ox++){
+        if(ty>=zBuf[ox])continue;
+        const u=(ox-(sx-half))/sz-0.5;
+        for(let oy=y0;oy<=y1;oy++){
+          const v=(oy-(csy-half))/sz-0.5;
+          // diamond shape
+          if(Math.abs(u)+Math.abs(v)>0.48)continue;
+          const d=Math.abs(u)+Math.abs(v);
+          const idx=(oy*W+ox)*4;
+          if(d>0.30){
+            const g=(0.48-d)/0.18;
+            buf[idx]  =Math.min(255,buf[idx]  +Math.floor(255*g*pulse));
+            buf[idx+1]=Math.min(255,buf[idx+1]+Math.floor(240*g*pulse));
+            buf[idx+2]=Math.min(255,buf[idx+2]+Math.floor(100*g*pulse));
+          }else{
+            buf[idx]=Math.floor(255*pulse);buf[idx+1]=Math.floor(248*pulse);
+            buf[idx+2]=Math.floor(180*pulse);buf[idx+3]=255;
+          }
+        }
+      }
+      if(Math.sqrt(sq)<12)labels.push({word:'KEY',sx,csy,sz,kind:'key'});
+    }
+  }
+
+  // ── SAFE object (dark iron box) ──
+  if(!safeUnlocked){
+    const{tx,ty,sq}=projectSprite(SAFE_OBJ.x,SAFE_OBJ.y);
+    if(ty>0.15){
+      const sx=Math.floor(W/2*(1+tx/ty));
+      const baseH=Math.abs(Math.floor(H/ty))*0.55|0;
+      const baseW=baseH*1.4|0;
+      const csy=(H>>1)+(baseH>>1);
+      const x0=Math.max(0,sx-baseW),x1=Math.min(W-1,sx+baseW);
+      const y0=Math.max(0,csy-baseH),y1=Math.min(H-1,csy);
+      for(let ox=x0;ox<=x1;ox++){
+        if(ty>=zBuf[ox])continue;
+        const u=(ox-sx)/(baseW||1);
+        for(let oy=y0;oy<=y1;oy++){
+          const v=(oy-y0)/(baseH||1);
+          const idx=(oy*W+ox)*4;
+          // iron body
+          const shade=0.25+v*0.2+(Math.abs(u)*0.1);
+          buf[idx]  =Math.floor(50*shade);
+          buf[idx+1]=Math.floor(46*shade);
+          buf[idx+2]=Math.floor(40*shade);
+          buf[idx+3]=255;
+          // door crack lines
+          if(Math.abs(u)<0.03||Math.abs(v-0.5)<0.03){
+            buf[idx]=18;buf[idx+1]=14;buf[idx+2]=10;
+          }
+          // handle nub
+          if(Math.abs(u)<0.08&&Math.abs(v-0.5)<0.07){
+            buf[idx]=Math.floor(180*shade);buf[idx+1]=Math.floor(150*shade);buf[idx+2]=Math.floor(60*shade);
+          }
+        }
+      }
+      if(Math.sqrt(sq)<14)labels.push({word:'SAFE',sx,csy:y0+(baseH>>1),sz:baseH,kind:'safe'});
+    }
+  }
+
+  return labels;
+}
+
+// ── SCARE FACE ───────────────────────────────────────────────────────────────
+function renderScare(){
+  const p=Math.min(1,scareFrame/60);
+  const shk=Math.max(0,1-p*5)*16;
+  ctx.save();
+  ctx.translate((Math.random()-0.5)*shk,(Math.random()-0.5)*shk*0.55);
+
+  // bg
+  ctx.fillStyle=`rgba(22,2,2,${Math.min(1,p*6)*0.88})`;
+  ctx.fillRect(-20,-20,W+40,H+40);
+
+  const fi=Math.min(1,p*7);
+  const fR=Math.min(W,H)*0.27;
+  const cx=W/2,cy=H/2;
+
+  // face body
+  ctx.fillStyle=scareVariant===3?`rgba(12,10,8,${fi})`:`rgba(215,205,188,${fi})`;
+  ctx.beginPath(); ctx.ellipse(cx,cy,fR,fR*1.28,0,0,Math.PI*2); ctx.fill();
+
+  const eyeY=cy-fR*0.18, eSpX=fR*0.30;
+  const eRx=fR*0.135, eRy=eRx*1.05;
+
+  if(scareVariant===1){
+    // hollow sockets
+    ctx.fillStyle=`rgba(0,0,0,${fi})`;
+    ctx.beginPath();ctx.ellipse(cx-eSpX,eyeY,eRx*1.3,eRy,0,0,Math.PI*2);ctx.fill();
+    ctx.beginPath();ctx.ellipse(cx+eSpX,eyeY,eRx*1.3,eRy,0,0,Math.PI*2);ctx.fill();
+  }else{
+    const ec=scareVariant===3?`rgba(215,205,188,${fi})`:`rgba(235,228,215,${fi})`;
+    ctx.fillStyle=ec;
+    ctx.beginPath();ctx.ellipse(cx-eSpX,eyeY,eRx,eRy,0,0,Math.PI*2);ctx.fill();
+    ctx.beginPath();ctx.ellipse(cx+eSpX,eyeY,eRx,eRy,0,0,Math.PI*2);ctx.fill();
+    const pR=eRx*(0.25+p*0.7);
+    const pc=scareVariant===3?`rgba(215,205,188,${fi})`:`rgba(5,2,2,${fi})`;
+    ctx.fillStyle=pc;
+    ctx.beginPath();ctx.arc(cx-eSpX,eyeY,pR,0,Math.PI*2);ctx.fill();
+    ctx.beginPath();ctx.arc(cx+eSpX,eyeY,pR,0,Math.PI*2);ctx.fill();
+  }
+
+  // mouth tears open
+  const mp=Math.max(0,Math.min(1,(p-0.12)/0.55));
+  if(mp>0){
+    const mY=cy+fR*0.32;
+    const mW=fR*(scareVariant===2?0.82:0.52);
+    const mH=fR*0.07+fR*0.48*mp;
+    ctx.fillStyle=scareVariant===3?`rgba(215,205,188,${fi})`:`rgba(8,3,3,${fi})`;
+    ctx.beginPath();ctx.ellipse(cx,mY,mW,mH,0,0,Math.PI*2);ctx.fill();
+    if(mp>0.45&&scareVariant!==3){
+      const ta=Math.min(1,(mp-0.45)/0.55)*fi;
+      ctx.fillStyle=`rgba(218,212,198,${ta})`;
+      const tw=mW*0.14;
+      for(let t=-2;t<=2;t++)ctx.fillRect(cx+t*tw*1.1-tw/2,mY-mH*0.55,tw,mH*0.38);
+    }
+  }
+
+  // cracks
+  if(p>0.42){
+    const ca=Math.min(1,(p-0.42)/0.35)*fi*0.72;
+    const cLen=fR*(0.6+p*1.2);
+    ctx.strokeStyle=`rgba(160,35,35,${ca})`; ctx.lineWidth=0.8;
+    for(const segs of CRACK_PATHS[scareVariant]){
+      ctx.beginPath(); ctx.moveTo(cx,cy);
+      for(const seg of segs)ctx.lineTo(cx+Math.cos(seg.angle)*cLen*seg.t,cy+Math.sin(seg.angle)*cLen*seg.t);
+      ctx.stroke();
+    }
+  }
+
+  // final red flash
+  if(p>0.78){
+    ctx.fillStyle=`rgba(130,5,5,${(p-0.78)/0.22*0.55})`;
+    ctx.fillRect(-20,-20,W+40,H+40);
+  }
+  ctx.restore();
+}
+
+// ── OUTSIDE SCENE ────────────────────────────────────────────────────────────
+function startEntering(){
+  gameState='entering'; fadeAlpha=0;
+  initAudio(); resumeAudio();
+  setTimeout(startDrone, 1400);
+}
+
+function renderOutside(ts){
+  // Sky gradient
+  const sky=ctx.createLinearGradient(0,0,0,H*0.58);
+  sky.addColorStop(0,'#020108'); sky.addColorStop(0.6,'#100d1a'); sky.addColorStop(1,'#1e1828');
+  ctx.fillStyle=sky; ctx.fillRect(0,0,W,H*0.58);
+  // Subtle cloud wisps
+  ctx.save(); ctx.globalAlpha=0.06;
+  [[0.15,0.25,0.4,0.08],[0.45,0.18,0.35,0.06],[0.72,0.30,0.28,0.05]].forEach(([fx,fy,fw,fh])=>{
+    const cg=ctx.createRadialGradient(fx*W,fy*H,0,fx*W,fy*H,fw*W);
+    cg.addColorStop(0,'rgba(180,170,200,1)'); cg.addColorStop(1,'rgba(180,170,200,0)');
+    ctx.fillStyle=cg; ctx.fillRect(0,0,W,H*0.55);
+  }); ctx.restore();
+
+  // Stars — proportional positions so they spread across any resolution
+  ctx.fillStyle='rgba(205,198,178,0.6)';
+  [[.05,.09],[.13,.15],[.22,.06],[.31,.12],[.40,.05],[.50,.10],[.58,.20],
+   [.66,.07],[.74,.16],[.82,.04],[.90,.13],[.96,.08],[.18,.22],[.44,.18],
+   [.70,.22],[.86,.19],[.08,.17],[.35,.08],[.55,.14],[.78,.25]].forEach(
+    ([fx,fy])=>{ ctx.beginPath();ctx.arc(fx*W,fy*H*0.55,1,0,Math.PI*2);ctx.fill(); }
+  );
+
+  // Crescent moon
+  const moonR=H*0.045;
+  const mX=W*0.78, mY=H*0.13;
+  // soft glow halo
+  const glow=ctx.createRadialGradient(mX,mY,moonR*0.5,mX,mY,moonR*3);
+  glow.addColorStop(0,'rgba(210,200,160,0.18)');
+  glow.addColorStop(1,'rgba(210,200,160,0)');
+  ctx.fillStyle=glow; ctx.beginPath(); ctx.arc(mX,mY,moonR*3,0,Math.PI*2); ctx.fill();
+  // full moon disc
+  ctx.fillStyle='rgba(225,215,175,0.92)';
+  ctx.beginPath(); ctx.arc(mX,mY,moonR,0,Math.PI*2); ctx.fill();
+  // bite out of the right side to make crescent
+  ctx.globalCompositeOperation='destination-out';
+  ctx.fillStyle='rgba(0,0,0,1)';
+  ctx.beginPath(); ctx.arc(mX+moonR*0.55,mY-moonR*0.1,moonR*0.82,0,Math.PI*2); ctx.fill();
+  ctx.globalCompositeOperation='source-over';
+
+  // Ground
+  const gnd=ctx.createLinearGradient(0,H*0.58,0,H);
+  gnd.addColorStop(0,'#181208'); gnd.addColorStop(1,'#060501');
+  ctx.fillStyle=gnd; ctx.fillRect(0,H*0.58,W,H*0.42);
+
+  // Path (perspective trapezoid)
+  ctx.fillStyle='rgba(32,22,8,0.55)';
+  ctx.beginPath();
+  ctx.moveTo(W/2-14,H*0.58); ctx.lineTo(W/2+14,H*0.58);
+  ctx.lineTo(W/2+68,H);      ctx.lineTo(W/2-68,H);
+  ctx.closePath(); ctx.fill();
+  ctx.strokeStyle='#251905'; ctx.lineWidth=0.8;
+  ctx.beginPath();ctx.moveTo(W/2-14,H*0.58);ctx.lineTo(W/2-68,H);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(W/2+14,H*0.58);ctx.lineTo(W/2+68,H);ctx.stroke();
+
+  // House (scales with approach)
+  const sc=0.38+approachProgress*0.62;
+  const hW=W*0.54*sc, hH=H*0.52*sc;
+  const hX=(W-hW)/2, hY=H*0.58-hH;
+
+  // Foundation
+  ctx.fillStyle='#0d0905';
+  ctx.fillRect(hX-hW*0.02, hY+hH*0.92, hW*1.04, hH*0.1);
+
+  // Body
+  ctx.fillStyle='#120d06'; ctx.fillRect(hX,hY,hW,hH);
+
+  // Wood siding lines
+  ctx.strokeStyle='rgba(0,0,0,0.35)'; ctx.lineWidth=Math.max(0.5,sc*0.8);
+  const sidingH=Math.max(2, hH*0.06);
+  for(let sy=hY+sidingH; sy<hY+hH; sy+=sidingH){
+    ctx.beginPath(); ctx.moveTo(hX,sy); ctx.lineTo(hX+hW,sy); ctx.stroke();
+  }
+
+  // Roof
+  ctx.fillStyle='#0c0804';
+  ctx.beginPath();
+  ctx.moveTo(hX-hW*0.05,hY); ctx.lineTo(W/2,hY-hH*0.35); ctx.lineTo(hX+hW*1.05,hY);
+  ctx.closePath(); ctx.fill();
+  // Roof shingles
+  ctx.strokeStyle='rgba(0,0,0,0.3)'; ctx.lineWidth=Math.max(0.4,sc*0.6);
+  const shingH=Math.max(2,hH*0.05);
+  for(let sy=hY-hH*0.05; sy>hY-hH*0.35; sy-=shingH){
+    const t=(hY-sy)/(hH*0.35);
+    const w2=hW*0.55*t;
+    ctx.beginPath(); ctx.moveTo(W/2-w2,sy); ctx.lineTo(W/2+w2,sy); ctx.stroke();
+  }
+
+  // Chimney
+  ctx.fillStyle='#0e0a05';
+  ctx.fillRect(hX+hW*0.64,hY-hH*0.38,hW*0.09,hH*0.22);
+  ctx.fillStyle='#0a0703';
+  ctx.fillRect(hX+hW*0.63,hY-hH*0.39,hW*0.11,hH*0.04);
+
+  // Left window — amber flicker
+  const wfl=0.28+0.20*Math.sin(ts*0.003+0.7)*Math.sin(ts*0.017+2.1);
+  const wX=hX+hW*0.12, wY=hY+hH*0.20, wW=hW*0.19, wH=hH*0.23;
+  // Shutter left
+  ctx.fillStyle='#0c0903'; ctx.fillRect(wX-wW*0.25,wY,wW*0.22,wH);
+  ctx.fillStyle='#0c0903'; ctx.fillRect(wX+wW+wW*0.03,wY,wW*0.22,wH);
+  // Window glow
+  ctx.fillStyle=`rgba(185,132,40,${wfl})`; ctx.fillRect(wX,wY,wW,wH);
+  // Cross
+  ctx.strokeStyle='rgba(8,5,1,0.8)'; ctx.lineWidth=Math.max(0.7,sc);
+  ctx.beginPath();ctx.moveTo(wX+wW/2,wY);ctx.lineTo(wX+wW/2,wY+wH);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(wX,wY+wH/2);ctx.lineTo(wX+wW,wY+wH/2);ctx.stroke();
+
+  // Right window — dark / maybe flickering
+  const rwX=hX+hW*0.68, rwW=hW*0.19, rwH=hH*0.23;
+  ctx.fillStyle='#05030100'; ctx.fillRect(rwX,wY,rwW,rwH);
+  ctx.fillStyle='rgba(3,2,1,0.95)'; ctx.fillRect(rwX,wY,rwW,rwH);
+  ctx.fillStyle='#0c0903'; ctx.fillRect(rwX-rwW*0.25,wY,rwW*0.22,rwH);
+  ctx.fillStyle='#0c0903'; ctx.fillRect(rwX+rwW+rwW*0.03,wY,rwW*0.22,rwH);
+  ctx.strokeStyle='rgba(20,13,5,0.6)'; ctx.lineWidth=Math.max(0.5,sc*0.7);
+  ctx.strokeRect(rwX,wY,rwW,rwH);
+
+  // Door
+  const dW=hW*0.19, dH=hH*0.38;
+  const dX=(W-dW)/2, dY=hY+hH-dH;
+  // Door frame
+  ctx.fillStyle='#1a1006';
+  ctx.fillRect(dX-hW*0.015,dY-dH*0.04,dW+hW*0.03,dH+dH*0.04);
+  // Door body
+  ctx.fillStyle='#221508'; ctx.fillRect(dX,dY,dW,dH);
+  // Door panels
+  ctx.strokeStyle='rgba(0,0,0,0.4)'; ctx.lineWidth=Math.max(0.5,sc*0.7);
+  ctx.strokeRect(dX+dW*0.12,dY+dH*0.06,dW*0.76,dH*0.38);
+  ctx.strokeRect(dX+dW*0.12,dY+dH*0.52,dW*0.76,dH*0.38);
+  // Arch
+  ctx.fillStyle='#1a1006';
+  ctx.beginPath(); ctx.arc(dX+dW/2,dY,dW/2,Math.PI,0); ctx.fill();
+  // Knob
+  if(sc>0.5){
+    ctx.fillStyle='#b89040';
+    ctx.beginPath(); ctx.arc(dX+dW*0.75,dY+dH*0.52,hW*0.014,0,Math.PI*2); ctx.fill();
+  }
+
+  // Front steps
+  ctx.fillStyle='#0f0b06';
+  ctx.fillRect(dX-dW*0.2,dY+dH,dW*1.4,hH*0.04);
+  ctx.fillStyle='#0c0904';
+  ctx.fillRect(dX-dW*0.1,dY+dH+hH*0.04,dW*1.2,hH*0.04);
+
+  // Porch light glow at door
+  const lgx=W/2, lgy=hY+hH;
+  const lg=ctx.createRadialGradient(lgx,lgy,0,lgx,lgy,hW*0.32);
+  const lfl=0.65+0.35*Math.sin(ts*0.013)*Math.sin(ts*0.029+1.1);
+  lg.addColorStop(0,`rgba(200,155,55,${lfl*0.45})`);
+  lg.addColorStop(1,'rgba(200,155,55,0)');
+  ctx.fillStyle=lg; ctx.beginPath(); ctx.arc(lgx,lgy,hW*0.32,0,Math.PI*2); ctx.fill();
+
+  // Falling particles (wind / leaves)
+  drawParticles();
+
+  // Dead tree (left of house)
+  const tX=hX-hW*0.16, tBY=H*0.58, tH2=hH*0.82;
+  ctx.strokeStyle='#0e0903'; ctx.lineWidth=1.3;
+  ctx.beginPath();ctx.moveTo(tX,tBY);ctx.lineTo(tX,tBY-tH2);ctx.stroke();
+  ctx.lineWidth=0.7;
+  ctx.beginPath();ctx.moveTo(tX,tBY-tH2*0.52);ctx.lineTo(tX-hW*0.09,tBY-tH2*0.72);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(tX,tBY-tH2*0.68);ctx.lineTo(tX+hW*0.07,tBY-tH2*0.83);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(tX,tBY-tH2*0.82);ctx.lineTo(tX-hW*0.04,tBY-tH2*0.94);ctx.stroke();
+
+  // Vignette
+  const vg=ctx.createRadialGradient(W/2,H/2,H*0.08,W/2,H/2,H*0.92);
+  vg.addColorStop(0,'rgba(0,0,0,0)'); vg.addColorStop(1,'rgba(0,0,0,0.85)');
+  ctx.fillStyle=vg; ctx.fillRect(0,0,W,H);
+
+  // ── overlay text at full resolution ──
+  oct.clearRect(0,0,oc.width,oc.height);
+  oct.textAlign='center'; oct.textBaseline='middle';
+  const ot=outsideTimer;
+  const oh=oc.height, ow=oc.width;
+
+  if(ot<2800){
+    const a=ot<500?ot/500:ot>2200?(2800-ot)/600:1;
+    oct.font=`${Math.floor(oh*0.07)}px 'Special Elite'`;
+    oct.fillStyle=`rgba(200,180,130,${a*0.92})`;
+    oct.fillText('3:47 AM',ow/2,oh/2);
+  } else if(ot<5800){
+    const a=(ot-2800)<500?(ot-2800)/500:ot>5100?(5800-ot)/700:1;
+    oct.font=`${Math.floor(oh*0.055)}px 'Special Elite'`;
+    oct.fillStyle=`rgba(200,180,130,${a*0.88})`;
+    oct.fillText('You come home.',ow/2,oh/2);
+    oct.font=`${Math.floor(oh*0.035)}px 'Crimson Text'`;
+    oct.fillStyle=`rgba(160,138,100,${a*0.72})`;
+    oct.fillText('Something feels wrong.',ow/2,oh/2+Math.floor(oh*0.07));
+  } else if(approachProgress<0.88){
+    oct.font=`${Math.floor(oh*0.032)}px 'Special Elite'`;
+    oct.fillStyle='rgba(160,138,95,0.80)';
+    oct.fillText('[ W ]  Walk to the door',ow/2,oh-Math.floor(oh*0.06));
+  }
+
+  // door prompt — large and clear
+  if(approachProgress>=0.88){
+    oct.font=`${Math.floor(oh*0.045)}px 'Special Elite'`;
+    oct.fillStyle='rgba(220,192,96,0.98)';
+    oct.fillText('[E]  Enter',ow/2,oh-Math.floor(oh*0.07));
+  }
+
+  // objective bar
+  const barH=Math.floor(oh*0.07);
+  oct.fillStyle='rgba(0,0,0,0.55)';
+  oct.fillRect(0,0,ow,barH);
+  oct.font=`${Math.floor(oh*0.038)}px 'Special Elite'`;
+  oct.fillStyle='rgba(200,184,128,0.88)';
+  oct.fillText('Go inside. Something happened to your family.',ow/2,barH/2);
+}
+
+// ── AUDIO ────────────────────────────────────────────────────────────────────
+let ac=null, droneGain=null;
+let footTimer=0, heartTimer=0, heartInterval=1500;
+let minimapOn=false;
+
+function initAudio(){
+  if(ac)return;
+  ac=new(window.AudioContext||window.webkitAudioContext)();
+}
+function resumeAudio(){ if(ac&&ac.state==='suspended')ac.resume(); }
+
+function tone(freq,dur,vol=0.08,type='sine',delay=0){
+  if(!ac)return;
+  const o=ac.createOscillator(), g=ac.createGain();
+  o.type=type; o.frequency.value=freq;
+  o.connect(g); g.connect(ac.destination);
+  const t=ac.currentTime+delay;
+  g.gain.setValueAtTime(0,t);
+  g.gain.linearRampToValueAtTime(vol,t+0.015);
+  g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+  o.start(t); o.stop(t+dur+0.05);
+}
+
+function noise(dur,vol=0.1,loFreq=200,hiFreq=1000,delay=0){
+  if(!ac)return;
+  const n=Math.floor(ac.sampleRate*dur);
+  const buf=ac.createBuffer(1,n,ac.sampleRate);
+  const d=buf.getChannelData(0);
+  for(let i=0;i<n;i++) d[i]=(Math.random()*2-1)*Math.pow(1-i/n,0.6);
+  const src=ac.createBufferSource();
+  src.buffer=buf;
+  const g=ac.createGain(); g.gain.value=vol;
+  const f=ac.createBiquadFilter();
+  f.type='bandpass'; f.frequency.value=(loFreq+hiFreq)/2; f.Q.value=0.7;
+  src.connect(f); f.connect(g); g.connect(ac.destination);
+  src.start(ac.currentTime+delay);
+}
+
+function startDrone(){
+  if(!ac||droneGain)return;
+  droneGain=ac.createGain();
+  droneGain.gain.setValueAtTime(0,ac.currentTime);
+  droneGain.gain.linearRampToValueAtTime(0.45,ac.currentTime+4);
+  droneGain.connect(ac.destination);
+  [[55,0.30,'sawtooth'],[55.7,0.25,'sawtooth'],[110,0.18,'sine'],[27.5,0.22,'sine']].forEach(([f,v,t])=>{
+    const o=ac.createOscillator(), g=ac.createGain();
+    o.type=t; o.frequency.value=f; g.gain.value=v;
+    o.connect(g); g.connect(droneGain); o.start();
+  });
+}
+
+function playFootstep(){ noise(0.10,0.45,60,350); }
+
+function playHeartbeat(){
+  tone(75,0.22,0.70,'sine');
+  tone(62,0.18,0.55,'sine',0.15);
+}
+
+function playWordChime(){
+  [523,659,784].forEach((f,i)=>tone(f,0.5,0.35,'sine',i*0.11));
+}
+
+function playScareSting(){
+  noise(1.5,0.95,150,4000);
+  tone(110,1.2,0.75,'sawtooth');
+  tone(55,2.0,0.85,'sawtooth',0.08);
+}
+
+function playRevealChime(){
+  [220,277,330,415,523].forEach((f,i)=>tone(f,2.5,0.28,'sine',i*0.35));
+}
+
+// ── PARTICLES (outside atmosphere) ───────────────────────────────────────────
+const PARTICLES=Array.from({length:28},()=>({
+  x:Math.random()*W, y:Math.random()*H*0.55,
+  vx:(Math.random()-0.5)*0.25, vy:Math.random()*0.25+0.08,
+  r:Math.random()*1.5+0.4, a:Math.random()*0.35+0.08,
+}));
+function tickParticles(dt){
+  const wind=Math.sin(outsideTimer*0.0003)*0.18;
+  for(const p of PARTICLES){
+    p.x+=(p.vx+wind)*dt*0.05;
+    p.y+=p.vy*dt*0.05;
+    if(p.y>H*0.59||p.x<-4||p.x>W+4){
+      p.x=Math.random()*W; p.y=-2;
+      p.vx=(Math.random()-0.5)*0.25;
+    }
+  }
+}
+function drawParticles(){
+  ctx.save();
+  for(const p of PARTICLES){
+    ctx.fillStyle=`rgba(70,48,20,${p.a})`;
+    ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,Math.PI*2); ctx.fill();
+  }
+  ctx.restore();
+}
+
+// ── MINIMAP ───────────────────────────────────────────────────────────────────
+function drawMinimap(){
+  const CELL=Math.floor(4*DS);
+  const mx=oc.width-MAP_W*CELL-Math.floor(10*DS);
+  const my=oc.height-MAP_H*CELL-Math.floor(10*DS);
+  // border + bg
+  oct.fillStyle='rgba(0,0,0,0.75)';
+  oct.fillRect(mx-3,my-3,MAP_W*CELL+6,MAP_H*CELL+6);
+  oct.strokeStyle='#3a2a18'; oct.lineWidth=1;
+  oct.strokeRect(mx-3,my-3,MAP_W*CELL+6,MAP_H*CELL+6);
+  // cells
+  for(let y=0;y<MAP_H;y++){
+    for(let x=0;x<MAP_W;x++){
+      oct.fillStyle=MAP[y*MAP_W+x]?'#2a1a08':'#1e140a';
+      oct.fillRect(mx+x*CELL,my+y*CELL,CELL-0.5,CELL-0.5);
+    }
+  }
+  // clue dots
+  CLUES.forEach(c=>{
+    oct.fillStyle=foundWords.includes(c.word)?'#dcc060':'#3a2a12';
+    oct.beginPath();
+    oct.arc(mx+c.x*CELL,my+c.y*CELL,CELL*0.55,0,Math.PI*2);
+    oct.fill();
+  });
+  // player dot + direction
+  const px2=mx+player.x*CELL, py2=my+player.y*CELL;
+  oct.fillStyle='#f0d878';
+  oct.beginPath(); oct.arc(px2,py2,CELL*0.8,0,Math.PI*2); oct.fill();
+  oct.strokeStyle='#f0d878'; oct.lineWidth=1;
+  oct.beginPath(); oct.moveTo(px2,py2);
+  oct.lineTo(px2+Math.cos(player.angle)*CELL*2.2,py2+Math.sin(player.angle)*CELL*2.2);
+  oct.stroke();
+  // label
+  oct.font=`${Math.floor(7*DS)}px 'Special Elite'`;
+  oct.fillStyle='rgba(138,120,80,0.7)';
+  oct.textAlign='center'; oct.textBaseline='top';
+  oct.fillText('[M] MAP',mx+MAP_W*CELL/2,my+MAP_H*CELL+4);
+}
+
+// ── MOVEMENT ──────────────────────────────────────────────────────────────────
+function move(dt){
+  if(gameState==='outside'){
+    if(keys['KeyW']||keys['ArrowUp'])   approachProgress=Math.min(1,approachProgress+dt*0.00042);
+    if(keys['KeyS']||keys['ArrowDown']) approachProgress=Math.max(0,approachProgress-dt*0.00042);
+    return;
+  }
+  if(gameState!=='inside')return;
+  if(inspectOpen||scareActive||notebookOpen)return;
+  if(mouseX){player.angle+=mouseX*0.0022;mouseX=0;}
+  if(keys['ArrowLeft']||keys['KeyQ'])player.angle-=ROT_SPEED;
+  if(keys['ArrowRight'])             player.angle+=ROT_SPEED;
+
+  let dx=0,dy=0;
+  const cos=Math.cos(player.angle),sin=Math.sin(player.angle);
+  if(keys['KeyW']||keys['ArrowUp'])  {dx+=cos;dy+=sin;}
+  if(keys['KeyS']||keys['ArrowDown']){dx-=cos;dy-=sin;}
+  if(keys['KeyA']){dx+=sin;dy-=cos;}
+  if(keys['KeyD']){dx-=sin;dy+=cos;}
+  const len=Math.sqrt(dx*dx+dy*dy);
+  if(len>0){dx/=len;dy/=len;}
+
+  const PAD=0.25;
+  const nx=player.x+dx*MOVE_SPEED, ny=player.y+dy*MOVE_SPEED;
+  if(!mapAt(nx+Math.sign(dx)*PAD,player.y))player.x=nx;
+  if(!mapAt(player.x,ny+Math.sign(dy)*PAD))player.y=ny;
+
+  const moved=Math.abs(player.x-lastPX)>0.002||Math.abs(player.y-lastPY)>0.002;
+  stillTimer=moved?0:stillTimer+dt;
+  lastPX=player.x; lastPY=player.y;
+}
+
+// ── SCARE LOGIC ───────────────────────────────────────────────────────────────
+function triggerScare(){
+  if(scareActive)return;
+  scareActive=true; scareFrame=0; scareVariant=Math.floor(Math.random()*4);
+  playScareSting();
+}
+function checkScares(dt){
+  if(inspectOpen)return;
+  if(scareCooldown>0){scareCooldown-=dt;return;}
+  if(scareActive)return;
+  for(let i=0;i<SCARE_ZONES.length;i++){
+    if(scaresFired.has(i))continue;
+    const z=SCARE_ZONES[i],dx=z.x-player.x,dy=z.y-player.y;
+    if(dx*dx+dy*dy<z.r*z.r){scaresFired.add(i);triggerScare();return;}
+  }
+  if(stillTimer>10000){stillTimer=0;triggerScare();}
+}
+
+// ── RENDER ────────────────────────────────────────────────────────────────────
+function render(ts){
+  renderWalls(ts);
+  const labels=renderSprites(ts);
+  ctx.putImageData(imgData,0,0);
+
+  // ── overlay: all text drawn at full display resolution ──
+  oct.clearRect(0,0,oc.width,oc.height);
+
+  // sprite labels (word orbs / key / safe)
+  oct.textAlign='center'; oct.textBaseline='middle';
+  for(const{word,sx,csy,sz,kind}of labels){
+    const fs=Math.max(16,Math.min(28,Math.floor(sz*0.28*DS)));
+    oct.font=`bold ${fs}px 'Special Elite', serif`;
+    const wx=Math.round(sx*DS);
+    const wy=Math.round(csy*DS - sz*DS*0.55 - fs*0.6);
+    const tw=oct.measureText(word).width;
+    const bdrCol=kind==='key'?'rgba(255,240,120,0.8)':kind==='safe'?'rgba(140,120,80,0.6)':'rgba(220,192,80,0.6)';
+    const txtCol=kind==='key'?'#fff8a0':kind==='safe'?'#b89860':'#f0d860';
+    oct.fillStyle='rgba(0,0,0,0.75)';
+    oct.fillRect(wx-tw/2-8,wy-fs/2-4,tw+16,fs+8);
+    oct.strokeStyle=bdrCol; oct.lineWidth=1;
+    oct.strokeRect(wx-tw/2-8,wy-fs/2-4,tw+16,fs+8);
+    oct.lineWidth=4; oct.strokeStyle='rgba(0,0,0,0.9)';
+    oct.strokeText(word,wx,wy);
+    oct.fillStyle=txtCol; oct.fillText(word,wx,wy);
+  }
+
+  // vignette
+  const vg=ctx.createRadialGradient(W/2,H/2,H*0.12,W/2,H/2,H*0.88);
+  vg.addColorStop(0,'rgba(0,0,0,0)'); vg.addColorStop(1,'rgba(0,0,0,0.75)');
+  ctx.fillStyle=vg; ctx.fillRect(0,0,W,H);
+
+  // stillness breathing
+  if(stillTimer>5000&&!scareActive){
+    const bA=Math.min(0.28,(stillTimer-5000)/15000)*(0.5+0.5*Math.sin(ts*0.0018));
+    ctx.fillStyle=`rgba(0,0,0,${bA})`; ctx.fillRect(0,0,W,H);
+  }
+
+  // post-scare red
+  if(postScareRed>0){
+    ctx.fillStyle=`rgba(110,0,0,${postScareRed*0.38})`; ctx.fillRect(0,0,W,H);
+  }
+
+  // white flash
+  if(whiteFlash>0){
+    ctx.fillStyle=`rgba(255,255,255,${whiteFlash})`; ctx.fillRect(0,0,W,H);
+  }
+
+  // scare face
+  if(scareActive)renderScare();
+
+  // HUD word chips
+  if(foundWords.length&&!scareActive){
+    const chipH=Math.floor(20*DS), pad=Math.floor(8*DS), gap=Math.floor(4*DS);
+    oct.font=`${Math.floor(13*DS)}px 'Special Elite'`;
+    oct.textAlign='left'; oct.textBaseline='middle';
+    let hx=Math.floor(5*DS), hy=oc.height-Math.floor(18*DS);
+    for(const w of foundWords){
+      const tw=oct.measureText(w).width+pad*2;
+      oct.fillStyle='rgba(20,12,3,0.82)'; oct.fillRect(hx,hy,tw,chipH);
+      oct.strokeStyle='#8a7850'; oct.lineWidth=1; oct.strokeRect(hx,hy,tw,chipH);
+      oct.fillStyle='#dcc060'; oct.fillText(w,hx+pad,hy+chipH/2);
+      hx+=tw+gap;
+    }
+  }
+
+  // crosshair
+  if(!scareActive){
+    const cx=oc.width/2, cy=oc.height/2, arm=Math.floor(6*DS);
+    oct.strokeStyle='rgba(200,184,128,0.28)'; oct.lineWidth=1;
+    oct.beginPath();oct.moveTo(cx-arm,cy);oct.lineTo(cx+arm,cy);oct.stroke();
+    oct.beginPath();oct.moveTo(cx,cy-arm);oct.lineTo(cx,cy+arm);oct.stroke();
+  }
+
+  // room label — bottom-right corner
+  if(!scareActive){
+    const room=currentRoom();
+    if(room){
+      oct.font=`${Math.floor(8*DS)}px 'Special Elite'`;
+      oct.textAlign='right'; oct.textBaseline='bottom';
+      oct.fillStyle='rgba(160,138,90,0.55)';
+      oct.fillText(room,oc.width-Math.floor(10*DS),oc.height-Math.floor(8*DS));
+    }
+  }
+
+  // interact prompt
+  if(!scareActive&&!inspectOpen){
+    let prompt='';
+    if(nearbyKey&&!hasKey)          prompt='[E]  TAKE THE KEY';
+    else if(nearbySafe&&!safeUnlocked) prompt=hasKey?'[E]  UNLOCK THE SAFE':'[E]  EXAMINE SAFE';
+    else if(nearbyClue&&safeUnlocked)  prompt='[E]  EXAMINE';
+    if(prompt){
+      oct.font=`${Math.floor(11*DS)}px 'Special Elite'`;
+      oct.textAlign='center'; oct.textBaseline='middle';
+      oct.fillStyle='rgba(220,192,96,0.90)';
+      oct.fillText(prompt,oc.width/2,oc.height-Math.floor(22*DS));
+    }
+  }
+
+  // hint message (key pickup, safe feedback)
+  if(hintTimer>0&&!scareActive){
+    const a=Math.min(1,hintTimer/500);
+    oct.font=`${Math.floor(10*DS)}px 'Crimson Text'`;
+    oct.textAlign='center'; oct.textBaseline='middle';
+    oct.fillStyle=`rgba(210,190,120,${a*0.92})`;
+    oct.fillText(hintMsg,oc.width/2,oc.height*0.72);
+  }
+
+  // key icon in HUD top-right when carrying key
+  if(hasKey&&!safeUnlocked&&!scareActive){
+    const kx=oc.width-Math.floor(22*DS), ky=Math.floor(22*DS);
+    const kr=Math.floor(7*DS);
+    oct.fillStyle='rgba(255,240,100,0.85)';
+    oct.beginPath();
+    for(let i=0;i<4;i++){
+      const a2=i*Math.PI/2-Math.PI/4;
+      oct.lineTo(kx+Math.cos(a2)*kr,ky+Math.sin(a2)*kr);
+    }
+    oct.closePath(); oct.fill();
+    oct.font=`${Math.floor(7*DS)}px 'Special Elite'`;
+    oct.fillStyle='rgba(200,170,60,0.9)';
+    oct.textAlign='center'; oct.textBaseline='top';
+    oct.fillText('KEY',kx,ky+kr+Math.floor(2*DS));
+  }
+
+  // minimap
+  if(minimapOn&&!scareActive) drawMinimap();
+
+  // objective banner
+  if(!scareActive){
+    const n=foundWords.length,total=CLUES.length;
+    const obj=
+      !hasKey    ? 'Find the key hidden in the mansion' :
+      !safeUnlocked ? 'Find the safe in the basement and unlock it  [ E ]' :
+      n===0      ? 'Search the house — find all 8 hidden words' :
+      n<total    ? `Find the hidden words — ${n} of ${total} found` :
+                   'Open your notebook  [ N ]  and arrange the words';
+    const col=(!hasKey||!safeUnlocked)?'rgba(200,184,128,0.75)':n===total?'rgba(220,192,96,0.92)':'rgba(200,184,128,0.75)';
+    const barH=Math.floor(16*DS);
+    oct.fillStyle='rgba(0,0,0,0.52)'; oct.fillRect(0,0,oc.width,barH);
+    oct.font=`${Math.floor(9*DS)}px 'Special Elite'`;
+    oct.textAlign='center'; oct.textBaseline='middle';
+    oct.fillStyle=col; oct.fillText(obj,oc.width/2,barH/2);
+  }
+}
+
+// ── MAIN LOOP ─────────────────────────────────────────────────────────────────
+function loop(ts){
+  const dt=Math.min(100,ts-lastTime); lastTime=ts;
+
+  // ── outside ──
+  if(gameState==='outside'||gameState==='entering'){
+    if(gameState==='outside'){ outsideTimer+=dt; tickParticles(dt); }
+    move(dt);
+    renderOutside(ts);
+    if(gameState==='entering'){
+      fadeAlpha+=dt/800;
+      ctx.fillStyle=`rgba(0,0,0,${Math.min(1,fadeAlpha)})`;
+      ctx.fillRect(0,0,W,H);
+      oct.clearRect(0,0,oc.width,oc.height); // clear text during fade
+      if(fadeAlpha>=1.3){ showCutscene(); }
+    }
+    requestAnimationFrame(loop); return;
+  }
+
+  // ── cutscene (CSS overlay active, just keep loop alive) ──
+  if(gameState==='cutscene'){ requestAnimationFrame(loop); return; }
+
+  // ── inside ──
+  move(dt);
+
+  // footsteps
+  if(!inspectOpen&&!scareActive&&!notebookOpen){
+    const moving=Math.abs(player.x-lastPX)>0.001||Math.abs(player.y-lastPY)>0.001;
+    footTimer=moving?footTimer+dt:0;
+    if(footTimer>400){playFootstep();footTimer=0;}
+  }
+
+  // heartbeat near scare zones
+  if(!scareActive&&scareCooldown<=0){
+    let minD=Infinity;
+    for(const z of SCARE_ZONES){ const d=Math.hypot(z.x-player.x,z.y-player.y); if(d<minD)minD=d; }
+    if(minD<6){
+      heartInterval=350+((minD/6)*1150);
+      heartTimer+=dt;
+      if(heartTimer>=heartInterval){playHeartbeat();heartTimer=0;}
+    } else { heartTimer=0; }
+  }
+
+  nearbyClue=null;
+  if(safeUnlocked){
+    for(const c of CLUES){
+      if(foundWords.includes(c.word))continue;
+      const dx=c.x-player.x,dy=c.y-player.y;
+      if(dx*dx+dy*dy<2.25){nearbyClue=c;break;}
+    }
+  }
+
+  nearbyKey=false;
+  if(!hasKey){
+    const dx=KEY_ITEM.x-player.x,dy=KEY_ITEM.y-player.y;
+    if(dx*dx+dy*dy<2.25) nearbyKey=true;
+  }
+  nearbySafe=false;
+  if(!safeUnlocked){
+    const dx=SAFE_OBJ.x-player.x,dy=SAFE_OBJ.y-player.y;
+    if(dx*dx+dy*dy<2.25) nearbySafe=true;
+  }
+
+  if(hintTimer>0) hintTimer=Math.max(0,hintTimer-dt);
+
+  checkScares(dt);
+
+  if(scareActive){
+    scareFrame++;
+    if(scareFrame>=60){scareActive=false;scareCooldown=8000;postScareRed=1;stillTimer=0;}
+  }
+  if(postScareRed>0)postScareRed=Math.max(0,postScareRed-dt/2000);
+  if(whiteFlash>0)  whiteFlash  =Math.max(0,whiteFlash  -dt/400);
+
+  render(ts);
+
+  saveTimer+=dt;
+  if(saveTimer>5000){saveState();saveTimer=0;}
+
+  requestAnimationFrame(loop);
+}
+</script>
+</body>
+</html>
