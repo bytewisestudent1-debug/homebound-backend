@@ -170,6 +170,28 @@
   }
   .skip-btn:hover { color:rgba(210,185,110,0.9); border-color:rgba(180,150,70,0.7); }
 
+  /* ── GAME OVER ── */
+  #gameover { background:#000; }
+  #gameover-box {
+    position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+    text-align:center;
+  }
+  #gameover-title {
+    font-size:3.4rem; font-family:'Special Elite',serif;
+    color:#c01818; letter-spacing:0.22em;
+    text-shadow:0 0 50px rgba(200,10,10,0.9), 0 0 100px rgba(160,0,0,0.5);
+    margin-bottom:1rem;
+    animation:goTitlePulse 2s ease-in-out infinite;
+  }
+  @keyframes goTitlePulse {
+    0%,100%{ text-shadow:0 0 40px rgba(200,10,10,0.8),0 0 80px rgba(130,0,0,0.4); }
+    50%    { text-shadow:0 0 70px rgba(255,20,20,1.0),0 0 130px rgba(200,0,0,0.7); }
+  }
+  #gameover-sub {
+    font-size:0.9rem; font-family:'Special Elite',serif;
+    color:rgba(160,80,80,0.65); letter-spacing:0.15em; margin-bottom:3.5rem;
+  }
+
   /* ── ENDING CUTSCENES ── */
   @keyframes morningCome { from{background:#000} to{background:#0b0d18} }
   @keyframes redBreath   { 0%{opacity:0.05} 50%{opacity:0.45} 100%{opacity:0.85} }
@@ -265,6 +287,15 @@
     <button class="hb-btn ecs-continue" id="ecs-disobey-btn" style="display:none">...</button>
   </div>
   <button class="skip-btn" id="skip-ecs-disobey">SKIP ›</button>
+</div>
+
+<!-- Game Over — timer expired -->
+<div id="gameover" class="screen">
+  <div id="gameover-box">
+    <div id="gameover-title">IT FOUND YOU</div>
+    <div id="gameover-sub">You ran out of time.</div>
+    <button class="hb-btn" id="gameover-again">TRY AGAIN</button>
+  </div>
 </div>
 
 <!-- Ending -->
@@ -435,6 +466,9 @@ const CORRECT_ORDER=['IF','OUR','VOICES','CALL','YOU','DO','NOT','ANSWER'];
 
 let scareActive=false, scareFrame=0, scareVariant=0;
 let scareCooldown=0, postScareRed=0;
+const GAME_DURATION=270000; // 4.5 min countdown (ms)
+let gameTimer=GAME_DURATION, timerActive=false, timerExpired=false;
+let timerJSActive=false, timerJSFrame=0;
 let flickerVal=1, whiteFlash=0;
 let stillTimer=0, lastPX=0, lastPY=0;
 let controlsTimer=12000; // shows controls overlay for first 12s inside
@@ -683,6 +717,7 @@ const ENDING_DISOBEY=[
   {text:'The cycle continues.',cls:'e-tag',delay:13500},
 ];
 function showEnding(lines){
+  timerExpired=true; timerActive=false; // stop timer on normal ending
   document.getElementById('choice').classList.remove('active');
   document.getElementById('ending').classList.add('active');
   const el=document.getElementById('ending-lines');
@@ -701,6 +736,7 @@ function showEnding(lines){
 }
 // ── ENDING CUTSCENES ─────────────────────────────────────────────────────────
 function showEndingCS(type){
+  timerExpired=true; timerActive=false; // stop timer on normal ending
   document.getElementById('choice').classList.remove('active');
   const screenId = type==='obey'?'ecs-obey':'ecs-disobey';
   const linesId  = screenId+'-lines';
@@ -793,6 +829,9 @@ document.getElementById('ecs-disobey-btn').addEventListener('click',()=>{
   showEnding(ENDING_DISOBEY);
 });
 document.getElementById('ending-again').addEventListener('click',()=>{
+  localStorage.removeItem('hb_save'); location.reload();
+});
+document.getElementById('gameover-again').addEventListener('click',()=>{
   localStorage.removeItem('hb_save'); location.reload();
 });
 
@@ -1632,6 +1671,84 @@ function playScareSting(){
   tone(55,2.0,0.85,'sawtooth',0.08);
 }
 
+function playTimerJumpscare(){
+  // Completely different from the normal scare sting — metallic impact + ultra shriek
+  noise(0.06,2.2,5000,18000);         // ultra-high shriek burst
+  noise(3.5,1.1,12,55);               // deep sub-bass rumble
+  tone(42,3.0,1.3,'sawtooth');        // bone-shaking sub-tone
+  tone(1400,0.07,1.2,'square');       // sharp crack
+  [880,660,440,330,220].forEach((f,i)=>tone(f,1.2,0.9-i*0.12,'sawtooth',0.03+i*0.045));
+}
+
+function renderTimerJumpscare(){
+  const p=Math.min(1,timerJSFrame/82);
+  const shk=p>0.82?(1-(p-0.82)/0.18)*26:0;
+  ctx.save();
+  if(shk>0) ctx.translate((Math.random()-0.5)*shk,(Math.random()-0.5)*shk*0.6);
+
+  // Blood-dark background floods in fast
+  ctx.fillStyle=`rgba(5,0,0,${Math.min(1,p*2.2)})`;
+  ctx.fillRect(-30,-30,W+60,H+60);
+
+  // Monster zooms exponentially toward the screen
+  const scale=Math.pow(p,2.0)*20;
+  const bodyH=H*scale, figW=bodyH*0.36;
+  const topY=H/2-bodyH/2, bboxLeft=W/2-figW/2;
+
+  if(p>0.06&&figW>1&&bodyH>1){
+    const figA=Math.min(1,p*3.8);
+    const CP=[
+      [0.43,0],[0.57,0],[0.60,0.08],[0.56,0.13],
+      [0.72,0.16],[0.78,0.16],[0.78,0.88],[0.72,0.88],[0.72,0.22],
+      [0.58,0.22],[0.58,0.60],[0.63,0.66],[0.63,1],[0.54,1],
+      [0.50,0.65],[0.46,1],[0.37,1],[0.37,0.66],[0.42,0.60],
+      [0.42,0.22],[0.28,0.22],[0.28,0.88],[0.22,0.88],[0.22,0.16],
+      [0.28,0.16],[0.44,0.13],[0.40,0.08]
+    ];
+    // Body
+    ctx.beginPath();
+    for(let i=0;i<CP.length;i++){
+      const x=bboxLeft+CP[i][0]*figW, y=topY+CP[i][1]*bodyH;
+      i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+    }
+    ctx.closePath();
+    ctx.fillStyle=`rgba(185,178,195,${figA*0.95})`;
+    ctx.fill();
+
+    // Pulsing red-orange eyes
+    const eyeR=Math.max(1,figW*0.055);
+    const eY=topY+bodyH*0.057;
+    const eL=bboxLeft+0.44*figW, eRx=bboxLeft+0.56*figW;
+    const ep=0.7+0.3*Math.sin(timerJSFrame*0.5);
+    ctx.fillStyle=`rgba(255,55,0,${figA*ep})`;
+    ctx.beginPath();ctx.ellipse(eL,eY,eyeR,eyeR*1.3,0,0,Math.PI*2);ctx.fill();
+    ctx.beginPath();ctx.ellipse(eRx,eY,eyeR,eyeR*1.3,0,0,Math.PI*2);ctx.fill();
+    // Eye glow
+    if(eyeR>3){
+      [eL,eRx].forEach(ex=>{
+        const g=ctx.createRadialGradient(ex,eY,0,ex,eY,eyeR*5);
+        g.addColorStop(0,`rgba(255,60,0,${figA*0.55})`);
+        g.addColorStop(1,`rgba(255,60,0,0)`);
+        ctx.fillStyle=g;
+        ctx.beginPath();ctx.arc(ex,eY,eyeR*5,0,Math.PI*2);ctx.fill();
+      });
+    }
+  }
+
+  // Red tint builds as monster closes in
+  if(p>0.45){
+    ctx.fillStyle=`rgba(110,0,0,${((p-0.45)/0.55)*0.5})`;
+    ctx.fillRect(-30,-30,W+60,H+60);
+  }
+  // Blinding white flash at impact
+  if(p>0.87){
+    const fA=Math.pow((p-0.87)/0.13,0.45)*0.92;
+    ctx.fillStyle=`rgba(255,255,255,${fA})`;
+    ctx.fillRect(-30,-30,W+60,H+60);
+  }
+  ctx.restore();
+}
+
 function playRevealChime(){
   [220,277,330,415,523].forEach((f,i)=>tone(f,2.5,0.28,'sine',i*0.35));
 }
@@ -1787,13 +1904,15 @@ function updateCaller(dt){
     // Auto-vanish after brief lifetime
     if(callerTimer>callerLifetime){
       callerActive=false; callerSwayT=0;
-      callerCooldown=(2000+Math.random()*2500)/callerFrequency;
+      const tMul=timerActive?1+((1-Math.max(0,gameTimer)/GAME_DURATION)*4.5):1;
+      callerCooldown=(2000+Math.random()*2500)/(callerFrequency*tMul);
       return;
     }
     // Silently vanish if player walks into it
     if(dist<1.8){
       callerActive=false; callerSwayT=0;
-      callerCooldown=(2500+Math.random()*2000)/callerFrequency;
+      const tMul=timerActive?1+((1-Math.max(0,gameTimer)/GAME_DURATION)*4.5):1;
+      callerCooldown=(2500+Math.random()*2000)/(callerFrequency*tMul);
       return;
     }
     return;
@@ -1833,8 +1952,9 @@ function updateCaller(dt){
   callerActive=true; callerX=pos.x; callerY=pos.y;
   callerTimer=0; callerLookAwayTime=0; callerTeleportTimer=0;
   callerSwayT=0; callerIsPeek=!!pos.peek; whisperRevealT=0;
-  // Stands for 1.5–3.5 s then vanishes on its own
-  callerLifetime=1500+Math.random()*2000;
+  // Lifetime grows longer as time runs out (monster lingers more)
+  const tRatio=timerActive?Math.max(0,gameTimer)/GAME_DURATION:1;
+  callerLifetime=1500+Math.random()*2000+(1-tRatio)*2500;
 
   if(Math.random()<0.52){
     let wTxt;
@@ -1920,6 +2040,17 @@ function render(ts){
     }
   }
 
+  // low-timer red vignette — builds as time runs out
+  if(timerActive&&!timerExpired&&gameTimer<60000){
+    const urgency=(60000-gameTimer)/60000; // 0=60s left → 1=0s left
+    const pulse=0.5+0.5*Math.sin(Date.now()*0.008*(1+urgency*3));
+    const vA=urgency*pulse*0.35;
+    const vg=ctx.createRadialGradient(W/2,H/2,H*0.2,W/2,H/2,H*0.75);
+    vg.addColorStop(0,'rgba(0,0,0,0)');
+    vg.addColorStop(1,`rgba(120,0,0,${vA})`);
+    ctx.fillStyle=vg; ctx.fillRect(0,0,W,H);
+  }
+
   // white flash
   if(whiteFlash>0){
     ctx.fillStyle=`rgba(255,255,255,${whiteFlash})`; ctx.fillRect(0,0,W,H);
@@ -1974,6 +2105,30 @@ function render(ts){
     oct.textAlign='left'; oct.textBaseline='top';
     oct.fillStyle=flashlightOn?'rgba(200,180,100,0.50)':'rgba(100,80,50,0.30)';
     oct.fillText(flashlightOn?'[F] ●':'[F] ○',Math.floor(6*DS),Math.floor(6*DS));
+  }
+
+  // ── Timer HUD (top-center) ──
+  if(gameState==='inside'&&!scareActive&&timerActive&&!timerExpired){
+    const secLeft=Math.ceil(gameTimer/1000);
+    const mins=Math.floor(secLeft/60), secs=secLeft%60;
+    const tStr=`${mins}:${secs<10?'0':''}${secs}`;
+    const critical=secLeft<=30, warn=secLeft<=60;
+    const pulse=0.7+0.3*Math.sin(Date.now()*0.008*(critical?3:warn?1.5:0.5));
+    const timerSize=Math.floor(11*DS);
+    oct.font=`${timerSize}px 'Special Elite'`;
+    oct.textAlign='center'; oct.textBaseline='top';
+    if(critical){
+      oct.fillStyle=`rgba(210,30,30,${pulse})`;
+    } else if(warn){
+      oct.fillStyle=`rgba(200,110,30,0.75)`;
+    } else {
+      oct.fillStyle='rgba(175,150,85,0.55)';
+    }
+    oct.fillText(tStr, oc.width/2, Math.floor(5*DS));
+    // small label
+    oct.font=`${Math.floor(6*DS)}px 'Special Elite'`;
+    oct.fillStyle=critical?`rgba(180,30,30,${pulse*0.7})`:'rgba(130,110,60,0.35)';
+    oct.fillText('TIME',oc.width/2,Math.floor(5*DS)+timerSize+Math.floor(1*DS));
   }
 
   // crosshair
@@ -2136,7 +2291,22 @@ function loop(ts){
   // ── cutscene (CSS overlay active, just keep loop alive) ──
   if(gameState==='cutscene'){ requestAnimationFrame(loop); return; }
 
+  // ── timer-triggered jumpscare ──
+  if(timerJSActive){
+    timerJSFrame++;
+    render(ts);
+    renderTimerJumpscare();
+    if(timerJSFrame>=85){
+      timerJSActive=false; gameState='gameover';
+      document.getElementById('gameover').classList.add('active');
+      document.exitPointerLock();
+    }
+    requestAnimationFrame(loop); return;
+  }
+  if(gameState==='gameover'){ return; }
+
   // ── inside ──
+  if(!timerActive&&gameState==='inside') timerActive=true;
   if(controlsTimer>0) controlsTimer=Math.max(0,controlsTimer-dt);
   move(dt);
 
@@ -2162,8 +2332,10 @@ function loop(ts){
     for(const z of SCARE_ZONES){ const d=Math.hypot(z.x-player.x,z.y-player.y); if(d<minD)minD=d; }
     const callerD=callerActive?Math.hypot(callerX-player.x,callerY-player.y):Infinity;
     const threat=Math.min(minD,callerD);
-    // Base 1800ms calm, 320ms at max threat
+    // Base 1800ms calm, 320ms at max threat; speeds up as timer runs low
+    const timerUrgency=timerActive?Math.max(0,1-gameTimer/GAME_DURATION):0;
     heartInterval= threat<8 ? 320+((threat/8)*1480) : 1800;
+    heartInterval=Math.max(220,heartInterval*(1-timerUrgency*0.55));
     heartTimer+=dt;
     if(heartTimer>=heartInterval){playHeartbeat();heartTimer=0;}
   }
@@ -2201,6 +2373,16 @@ function loop(ts){
     } else if(safeUnlocked&&foundWords.length<8&&callerInsideTime>60000&&callerInsideTime%25000<dt){
       hintMsg='Walk close to glowing orbs to collect hidden words.  Press [ N ] to open your notebook.';
       hintTimer=6000;
+    }
+  }
+
+  // ── countdown timer ──
+  if(timerActive&&!timerExpired){
+    gameTimer=Math.max(0,gameTimer-dt);
+    if(gameTimer<=0){
+      timerExpired=true; timerJSActive=true; timerJSFrame=0;
+      callerActive=false; scareActive=false;
+      resumeAudio(); playTimerJumpscare();
     }
   }
 
