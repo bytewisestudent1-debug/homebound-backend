@@ -80,6 +80,14 @@
     transition:border-color 0.2s, color 0.2s;
   }
   #restart-btn:hover { border-color:#8a7850; color:#c8b880; }
+  #escape-restart-btn {
+    position:fixed; bottom:14px; left:16px; z-index:30;
+    background:rgba(4,1,1,0.82); border:1px solid rgba(180,35,20,0.55);
+    color:rgba(210,80,55,0.80); font-family:'Special Elite',cursive;
+    font-size:0.75rem; padding:6px 14px; cursor:pointer;
+    letter-spacing:0.14em; transition:border-color 0.2s,color 0.2s;
+  }
+  #escape-restart-btn:hover { border-color:rgba(220,60,35,0.9); color:rgba(245,100,70,1); }
 
   /* ── NOTEBOOK ── */
   #notebook { background:rgba(3,2,1,0.97); }
@@ -162,7 +170,7 @@
   #cutscene-lines .cs-tag  { font-size:0.85rem; color:#8a6840; letter-spacing:0.3em; }
   #cutscene-continue { opacity:0; margin-top:2.5rem; animation:fadeUp 1s forwards; }
   .skip-btn {
-    position:fixed; bottom:1.4rem; right:1.6rem;
+    position:fixed; bottom:1.4rem; left:1.6rem;
     background:none; border:1px solid rgba(120,100,60,0.45);
     color:rgba(160,138,90,0.55); font-family:'Special Elite',serif;
     font-size:0.7rem; letter-spacing:0.18em; padding:0.35rem 0.9rem;
@@ -316,6 +324,7 @@
 </div>
 
 <button id="restart-btn" title="Restart from the beginning">↺ RESTART</button>
+<button id="escape-restart-btn" style="display:none">↺ RESTART RUN</button>
 
 <div id="wrap">
   <canvas id="c"></canvas>
@@ -374,7 +383,54 @@ const MAP = [
 // Row 19 — outer bottom wall
 1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
 ];
+// ── ESCAPE CORRIDOR ───────────────────────────────────────────────────────────
+// 5 wide (x 0-4), 36 long (y 0-35). Door at y=0. Player starts at y=33.
+const ESCAPE_W=5,ESCAPE_H=36;
+const ESCAPE_MAP=[
+1,1,1,1,1, // y=0  door wall
+1,0,0,0,1, // y=1
+1,0,0,0,1, // y=2
+1,0,1,0,1, // y=3  centre pillar
+1,0,0,0,1, // y=4
+1,0,0,0,1, // y=5
+1,1,0,0,1, // y=6  left pillar
+1,0,0,0,1, // y=7
+1,0,0,0,1, // y=8
+1,0,0,1,1, // y=9  right pillar
+1,0,0,0,1, // y=10
+1,0,0,0,1, // y=11
+1,0,1,0,1, // y=12 centre pillar
+1,0,0,0,1, // y=13
+1,0,0,0,1, // y=14
+1,1,0,0,1, // y=15 left pillar
+1,0,0,0,1, // y=16
+1,0,0,0,1, // y=17
+1,0,0,1,1, // y=18 right pillar
+1,0,0,0,1, // y=19
+1,0,0,0,1, // y=20
+1,0,1,0,1, // y=21 centre pillar
+1,0,0,0,1, // y=22
+1,0,0,0,1, // y=23
+1,1,0,0,1, // y=24 left pillar
+1,0,0,0,1, // y=25
+1,0,0,0,1, // y=26
+1,0,0,1,1, // y=27 right pillar
+1,0,0,0,1, // y=28
+1,0,0,0,1, // y=29
+1,0,1,0,1, // y=30 centre pillar
+1,0,0,0,1, // y=31
+1,0,0,0,1, // y=32
+1,0,0,0,1, // y=33 player start
+1,0,0,0,1, // y=34
+1,1,1,1,1, // y=35 back wall
+];
+
 function mapAt(x,y){
+  if(gameState==='escape'){
+    const xi=Math.floor(x),yi=Math.floor(y);
+    if(xi<0||xi>=ESCAPE_W||yi<0||yi>=ESCAPE_H)return 1;
+    return ESCAPE_MAP[yi*ESCAPE_W+xi];
+  }
   const xi=Math.floor(x),yi=Math.floor(y);
   if(xi<0||xi>=MAP_W||yi<0||yi>=MAP_H)return 1;
   return MAP[yi*MAP_W+xi];
@@ -466,7 +522,11 @@ const CORRECT_ORDER=['IF','OUR','VOICES','CALL','YOU','DO','NOT','ANSWER'];
 
 let scareActive=false, scareFrame=0, scareVariant=0;
 let scareCooldown=0, postScareRed=0;
-const GAME_DURATION=270000; // 4.5 min countdown (ms)
+// ── escape run state ──
+let escapeCaptured=false, escapeWon=false;
+let escapeMonX=2.5, escapeMonY=34.5;
+let escapeTimer=0, escapeMonActive=false, escapeIntroTimer=0;
+const GAME_DURATION=420000; // 7 min countdown (ms)
 let gameTimer=GAME_DURATION, timerActive=false, timerExpired=false;
 let timerJSActive=false, timerJSFrame=0;
 let flickerVal=1, whiteFlash=0;
@@ -541,6 +601,13 @@ addEventListener('keydown',e=>{
   }
   if(e.code==='KeyF'&&gameState==='inside'){flashlightOn=!flashlightOn;return;}
   if(e.code==='KeyE'){
+    if(gameState==='escape'&&player.y<1.8&&!escapeCaptured&&!escapeWon){
+      escapeWon=true;
+      document.getElementById('escape-restart-btn').style.display='none';
+      document.exitPointerLock();
+      setTimeout(()=>{ gameState='inside'; showEnding(ENDING_OBEY); },600);
+      return;
+    }
     if(gameState==='outside'&&approachProgress>=0.88){startEntering();return;}
     if(gameState==='inside'&&!inspectOpen&&!scareActive&&!notebookOpen){
       // Pick up key
@@ -815,7 +882,7 @@ function showEndingCS(type){
 
 // Wire up buttons → cutscene → ending
 document.getElementById('btn-obey').addEventListener('click',()=>{
-  finalChoice='obey'; saveState(); showEndingCS('obey');
+  startEscapeSequence();
 });
 document.getElementById('btn-disobey').addEventListener('click',()=>{
   finalChoice='disobey'; saveState(); showEndingCS('disobey');
@@ -835,6 +902,9 @@ document.getElementById('gameover-again').addEventListener('click',()=>{
   localStorage.removeItem('hb_save'); location.reload();
 });
 
+document.getElementById('escape-restart-btn').addEventListener('click',()=>{
+  startEscapeSequence();
+});
 document.getElementById('restart-btn').addEventListener('click',()=>{
   if(confirm('Restart from the beginning? All progress will be lost.')){
     localStorage.removeItem('hb_save');
@@ -890,7 +960,10 @@ function showCutscene(){
     {text:'Find the key.',cls:'cs-tag',delay:8000},
     {text:'Unlock the safe.',cls:'cs-tag',delay:9200},
     {text:'Take the notebook inside.',cls:'cs-tag',delay:10400},
-    {text:'Then find the words.',cls:'cs-mid',delay:11600},
+    {text:'Find all the hidden words. Solve the mystery.',cls:'cs-mid',delay:11600},
+    {text:'But you are not alone in here.',cls:'cs-big',delay:13600},
+    {text:'Something is already watching.',cls:'cs-mid',delay:15400},
+    {text:'Figure it all out — before the time runs out.',cls:'cs-big',delay:17200},
   ];
   lines.forEach(({text,cls,delay})=>{
     const p=document.createElement('p');
@@ -900,8 +973,8 @@ function showCutscene(){
   });
   const btn=document.getElementById('cutscene-continue');
   btn.style.display='none';
-  btn.style.animationDelay='14000ms';
-  setTimeout(()=>{ btn.style.display='block'; },14000);
+  btn.style.animationDelay='20000ms';
+  setTimeout(()=>{ btn.style.display='block'; },20000);
 }
 function enterFromCutscene(){
   document.getElementById('cutscene').classList.remove('active');
@@ -980,6 +1053,7 @@ const ceilTex =new Uint8Array(TEX*TEX*3);
 // Returns a tint multiplier [r,g,b] based on which room the hit wall belongs to.
 // Rooms are identified by the grid cell just before the wall was hit.
 function roomTint(mx,my){
+  if(gameState==='escape') return [0.30,0.12,0.10]; // deep crimson corridor
   // Hallways — very dark grey stone
   if(my===7||my===8||my===9) return [0.32,0.32,0.35];
   // North wing
@@ -1138,6 +1212,52 @@ function projectSprite(wx,wy){
 }
 
 function renderSprites(ts){
+  // ── Escape mode: only render the chasing monster ──
+  if(gameState==='escape'){
+    if(escapeMonActive&&!escapeCaptured){
+      const{tx,ty}=projectSprite(escapeMonX,escapeMonY);
+      if(ty>0.1){
+        const sx=Math.floor(W/2*(1+tx/ty));
+        const bodyH=Math.min(H-1,Math.abs(Math.floor(H/ty))*1.1)|0;
+        const CP=[
+          [0.43,0],[0.57,0],[0.60,0.08],[0.56,0.13],
+          [0.72,0.16],[0.78,0.16],[0.78,0.88],[0.72,0.88],[0.72,0.22],
+          [0.58,0.22],[0.58,0.60],[0.63,0.66],[0.63,1],[0.54,1],
+          [0.50,0.65],[0.46,1],[0.37,1],[0.37,0.66],[0.42,0.60],
+          [0.42,0.22],[0.28,0.22],[0.28,0.88],[0.22,0.88],[0.22,0.16],
+          [0.28,0.16],[0.44,0.13],[0.40,0.08]
+        ];
+        const NP=CP.length;
+        const figW=Math.max(8,Math.floor(bodyH*0.36));
+        const bboxLeft=sx-figW*0.5;
+        const topY=Math.floor((H-bodyH)/2);
+        const scanL=Math.max(0,Math.floor(bboxLeft));
+        const scanR=Math.min(W-1,Math.floor(bboxLeft+figW));
+        // pulse eyes with rage
+        const ep=0.6+0.4*Math.sin(escapeTimer*0.012);
+        for(let ox=scanL;ox<=scanR;ox++){
+          if(ty>=zBuf[ox])continue;
+          const u=(ox-bboxLeft)/figW;
+          for(let oy=Math.max(0,topY);oy<=Math.min(H-1,topY+bodyH);oy++){
+            const v=(oy-topY)/bodyH;
+            let ins=false;
+            for(let i=0,j=NP-1;i<NP;j=i++){
+              const xi=CP[i][0],yi=CP[i][1],xj=CP[j][0],yj=CP[j][1];
+              if(((yi>v)!==(yj>v))&&(u<(xj-xi)*(v-yi)/(yj-yi)+xi))ins=!ins;
+            }
+            if(!ins)continue;
+            const idx=(oy*W+ox)*4;
+            if(v>0.02&&v<0.10&&(Math.abs(u-0.44)<0.05||Math.abs(u-0.56)<0.05)){
+              buf[idx]=Math.floor(255*ep);buf[idx+1]=Math.floor(40*ep);buf[idx+2]=0;buf[idx+3]=255;
+            } else {
+              buf[idx]=185;buf[idx+1]=178;buf[idx+2]=195;buf[idx+3]=255;
+            }
+          }
+        }
+      }
+    }
+    return [];
+  }
   const labels=[];
 
   // ── Word orbs (only visible after notebook found in safe) ──
@@ -1322,76 +1442,69 @@ function renderSprites(ts){
   return labels;
 }
 
-// ── SCARE FACE ───────────────────────────────────────────────────────────────
+// ── SCARE — polygon monster zoom (same shape as title screen silhouette) ──────
 function renderScare(){
-  const p=Math.min(1,scareFrame/60);
-  const shk=Math.max(0,1-p*5)*16;
+  const p=Math.min(1,scareFrame/52);
+  const shk=p<0.8?(1-p/0.8)*22:0;
   ctx.save();
-  ctx.translate((Math.random()-0.5)*shk,(Math.random()-0.5)*shk*0.55);
+  if(shk>0) ctx.translate((Math.random()-0.5)*shk,(Math.random()-0.5)*shk*0.6);
 
-  // bg
-  ctx.fillStyle=`rgba(22,2,2,${Math.min(1,p*6)*0.88})`;
+  // Blood-dark flood
+  ctx.fillStyle=`rgba(5,0,0,${Math.min(1,p*2.8)})`;
   ctx.fillRect(-20,-20,W+40,H+40);
 
-  const fi=Math.min(1,p*7);
-  const fR=Math.min(W,H)*0.27;
-  const cx=W/2,cy=H/2;
+  // Monster rushes at screen — exponential zoom
+  const scale=Math.pow(p,1.8)*20;
+  const bodyH=H*scale, figW=bodyH*0.36;
+  const topY=H/2-bodyH/2, bboxLeft=W/2-figW/2;
 
-  // face body
-  ctx.fillStyle=scareVariant===3?`rgba(12,10,8,${fi})`:`rgba(215,205,188,${fi})`;
-  ctx.beginPath(); ctx.ellipse(cx,cy,fR,fR*1.28,0,0,Math.PI*2); ctx.fill();
+  if(p>0.05&&figW>1&&bodyH>1){
+    const figA=Math.min(1,p*4.2);
+    const CP=[
+      [0.43,0],[0.57,0],[0.60,0.08],[0.56,0.13],
+      [0.72,0.16],[0.78,0.16],[0.78,0.88],[0.72,0.88],[0.72,0.22],
+      [0.58,0.22],[0.58,0.60],[0.63,0.66],[0.63,1],[0.54,1],
+      [0.50,0.65],[0.46,1],[0.37,1],[0.37,0.66],[0.42,0.60],
+      [0.42,0.22],[0.28,0.22],[0.28,0.88],[0.22,0.88],[0.22,0.16],
+      [0.28,0.16],[0.44,0.13],[0.40,0.08]
+    ];
+    ctx.beginPath();
+    for(let i=0;i<CP.length;i++){
+      const x=bboxLeft+CP[i][0]*figW, y=topY+CP[i][1]*bodyH;
+      i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+    }
+    ctx.closePath();
+    ctx.fillStyle=`rgba(185,178,195,${figA*0.95})`;
+    ctx.fill();
 
-  const eyeY=cy-fR*0.18, eSpX=fR*0.30;
-  const eRx=fR*0.135, eRy=eRx*1.05;
-
-  if(scareVariant===1){
-    // hollow sockets
-    ctx.fillStyle=`rgba(0,0,0,${fi})`;
-    ctx.beginPath();ctx.ellipse(cx-eSpX,eyeY,eRx*1.3,eRy,0,0,Math.PI*2);ctx.fill();
-    ctx.beginPath();ctx.ellipse(cx+eSpX,eyeY,eRx*1.3,eRy,0,0,Math.PI*2);ctx.fill();
-  }else{
-    const ec=scareVariant===3?`rgba(215,205,188,${fi})`:`rgba(235,228,215,${fi})`;
-    ctx.fillStyle=ec;
-    ctx.beginPath();ctx.ellipse(cx-eSpX,eyeY,eRx,eRy,0,0,Math.PI*2);ctx.fill();
-    ctx.beginPath();ctx.ellipse(cx+eSpX,eyeY,eRx,eRy,0,0,Math.PI*2);ctx.fill();
-    const pR=eRx*(0.25+p*0.7);
-    const pc=scareVariant===3?`rgba(215,205,188,${fi})`:`rgba(5,2,2,${fi})`;
-    ctx.fillStyle=pc;
-    ctx.beginPath();ctx.arc(cx-eSpX,eyeY,pR,0,Math.PI*2);ctx.fill();
-    ctx.beginPath();ctx.arc(cx+eSpX,eyeY,pR,0,Math.PI*2);ctx.fill();
-  }
-
-  // mouth tears open
-  const mp=Math.max(0,Math.min(1,(p-0.12)/0.55));
-  if(mp>0){
-    const mY=cy+fR*0.32;
-    const mW=fR*(scareVariant===2?0.82:0.52);
-    const mH=fR*0.07+fR*0.48*mp;
-    ctx.fillStyle=scareVariant===3?`rgba(215,205,188,${fi})`:`rgba(8,3,3,${fi})`;
-    ctx.beginPath();ctx.ellipse(cx,mY,mW,mH,0,0,Math.PI*2);ctx.fill();
-    if(mp>0.45&&scareVariant!==3){
-      const ta=Math.min(1,(mp-0.45)/0.55)*fi;
-      ctx.fillStyle=`rgba(218,212,198,${ta})`;
-      const tw=mW*0.14;
-      for(let t=-2;t<=2;t++)ctx.fillRect(cx+t*tw*1.1-tw/2,mY-mH*0.55,tw,mH*0.38);
+    // Blazing orange-red eyes
+    const eyeR=Math.max(1,figW*0.058);
+    const eY=topY+bodyH*0.057;
+    const eL=bboxLeft+0.44*figW, eRx=bboxLeft+0.56*figW;
+    const ep=0.65+0.35*Math.sin(scareFrame*0.55);
+    ctx.fillStyle=`rgba(255,55,0,${figA*ep})`;
+    ctx.beginPath();ctx.ellipse(eL,eY,eyeR,eyeR*1.3,0,0,Math.PI*2);ctx.fill();
+    ctx.beginPath();ctx.ellipse(eRx,eY,eyeR,eyeR*1.3,0,0,Math.PI*2);ctx.fill();
+    // Eye glow
+    if(eyeR>2){
+      [eL,eRx].forEach(ex=>{
+        const g=ctx.createRadialGradient(ex,eY,0,ex,eY,eyeR*5);
+        g.addColorStop(0,`rgba(255,60,0,${figA*0.6})`);
+        g.addColorStop(1,'rgba(255,60,0,0)');
+        ctx.fillStyle=g;
+        ctx.beginPath();ctx.arc(ex,eY,eyeR*5,0,Math.PI*2);ctx.fill();
+      });
     }
   }
 
-  // cracks
-  if(p>0.42){
-    const ca=Math.min(1,(p-0.42)/0.35)*fi*0.72;
-    const cLen=fR*(0.6+p*1.2);
-    ctx.strokeStyle=`rgba(160,35,35,${ca})`; ctx.lineWidth=0.8;
-    for(const segs of CRACK_PATHS[scareVariant]){
-      ctx.beginPath(); ctx.moveTo(cx,cy);
-      for(const seg of segs)ctx.lineTo(cx+Math.cos(seg.angle)*cLen*seg.t,cy+Math.sin(seg.angle)*cLen*seg.t);
-      ctx.stroke();
-    }
+  // Red tint builds
+  if(p>0.4){
+    ctx.fillStyle=`rgba(120,0,0,${((p-0.4)/0.6)*0.48})`;
+    ctx.fillRect(-20,-20,W+40,H+40);
   }
-
-  // final red flash
-  if(p>0.78){
-    ctx.fillStyle=`rgba(130,5,5,${(p-0.78)/0.22*0.55})`;
+  // White flash at impact
+  if(p>0.86){
+    ctx.fillStyle=`rgba(255,255,255,${Math.pow((p-0.86)/0.14,0.5)*0.92})`;
     ctx.fillRect(-20,-20,W+40,H+40);
   }
   ctx.restore();
@@ -1650,15 +1763,14 @@ function noise(dur,vol=0.1,loFreq=200,hiFreq=1000,delay=0){
 
 
 function playFootstep(){
-  // Low thud + mid scuff — louder and more distinct
-  noise(0.12,0.85,40,200);
-  noise(0.07,0.40,200,900,0.03);
+  noise(0.18,3.5,20,130);        // heavy floor thud
+  noise(0.10,1.6,150,600,0.06); // scuff/creak
 }
 
 function playHeartbeat(){
-  // Louder, deeper double-thump
-  tone(68,0.28,1.0,'sine');
-  tone(58,0.22,0.80,'sine',0.18);
+  tone(58,0.38,4.2,'sine');       // main thump — loud and low
+  tone(48,0.30,3.5,'sine',0.24);  // follow-beat
+  noise(0.12,0.90,18,65);         // physical chest bass
 }
 
 function playWordChime(){
@@ -1666,18 +1778,24 @@ function playWordChime(){
 }
 
 function playScareSting(){
-  noise(1.5,0.95,150,4000);
-  tone(110,1.2,0.75,'sawtooth');
-  tone(55,2.0,0.85,'sawtooth',0.08);
+  // Loud static burst + distorted scream
+  noise(0.04,5.0,60,9000);             // instant wide-band impact
+  noise(2.5,2.2,18,70);               // sub-bass slam
+  tone(185,0.9,4.5,'sawtooth');        // harsh screech
+  tone(140,1.3,4.0,'sawtooth',0.06);   // dissonant undertone
+  tone(95,1.8,3.5,'sawtooth',0.12);    // bass groan
+  noise(0.4,2.5,600,3500,0.02);        // mid crunch
 }
 
 function playTimerJumpscare(){
-  // Completely different from the normal scare sting — metallic impact + ultra shriek
-  noise(0.06,2.2,5000,18000);         // ultra-high shriek burst
-  noise(3.5,1.1,12,55);               // deep sub-bass rumble
-  tone(42,3.0,1.3,'sawtooth');        // bone-shaking sub-tone
-  tone(1400,0.07,1.2,'square');       // sharp crack
-  [880,660,440,330,220].forEach((f,i)=>tone(f,1.2,0.9-i*0.12,'sawtooth',0.03+i*0.045));
+  // Even heavier — the final catch
+  noise(0.03,6.5,50,11000);           // massive instant static wall
+  noise(3.0,3.0,12,50);              // deep body-shaking sub-bass
+  tone(160,1.2,5.5,'sawtooth');       // piercing screech
+  tone(120,1.8,5.0,'sawtooth',0.07);  // layered distortion
+  tone(80,2.5,4.5,'sawtooth',0.14);   // groaning bass
+  noise(0.5,3.5,400,3000,0.02);       // mid-range crunch
+  noise(0.3,2.8,2000,8000,0.01);      // high shimmer on top
 }
 
 function renderTimerJumpscare(){
@@ -1825,8 +1943,8 @@ function move(dt){
     if(keys['KeyS']||keys['ArrowDown']) approachProgress=Math.max(0,approachProgress-dt*0.00042);
     return;
   }
-  if(gameState!=='inside')return;
-  if(inspectOpen||scareActive||notebookOpen)return;
+  if(gameState!=='inside'&&gameState!=='escape')return;
+  if(gameState==='inside'&&(inspectOpen||scareActive||notebookOpen))return;
   if(mouseX){player.angle+=mouseX*0.0022;mouseX=0;}
   if(keys['ArrowLeft']||keys['KeyQ'])player.angle-=ROT_SPEED;
   if(keys['ArrowRight'])             player.angle+=ROT_SPEED;
@@ -2107,29 +2225,6 @@ function render(ts){
     oct.fillText(flashlightOn?'[F] ●':'[F] ○',Math.floor(6*DS),Math.floor(6*DS));
   }
 
-  // ── Timer HUD (top-center) ──
-  if(gameState==='inside'&&!scareActive&&timerActive&&!timerExpired){
-    const secLeft=Math.ceil(gameTimer/1000);
-    const mins=Math.floor(secLeft/60), secs=secLeft%60;
-    const tStr=`${mins}:${secs<10?'0':''}${secs}`;
-    const critical=secLeft<=30, warn=secLeft<=60;
-    const pulse=0.7+0.3*Math.sin(Date.now()*0.008*(critical?3:warn?1.5:0.5));
-    const timerSize=Math.floor(11*DS);
-    oct.font=`${timerSize}px 'Special Elite'`;
-    oct.textAlign='center'; oct.textBaseline='top';
-    if(critical){
-      oct.fillStyle=`rgba(210,30,30,${pulse})`;
-    } else if(warn){
-      oct.fillStyle=`rgba(200,110,30,0.75)`;
-    } else {
-      oct.fillStyle='rgba(175,150,85,0.55)';
-    }
-    oct.fillText(tStr, oc.width/2, Math.floor(5*DS));
-    // small label
-    oct.font=`${Math.floor(6*DS)}px 'Special Elite'`;
-    oct.fillStyle=critical?`rgba(180,30,30,${pulse*0.7})`:'rgba(130,110,60,0.35)';
-    oct.fillText('TIME',oc.width/2,Math.floor(5*DS)+timerSize+Math.floor(1*DS));
-  }
 
   // crosshair
   if(!scareActive){
@@ -2140,7 +2235,7 @@ function render(ts){
   }
 
   // room label — bottom-right corner
-  if(!scareActive){
+  if(!scareActive&&gameState==='inside'){
     const room=currentRoom();
     if(room){
       oct.font=`${Math.floor(8*DS)}px 'Special Elite'`;
@@ -2229,11 +2324,45 @@ function render(ts){
                       '[ OBJECTIVE ]  All words found — open notebook  [ N ]  and arrange the sentence';
     const urgent=n===total||(!hasKey);
     const col=urgent?'rgba(230,205,110,0.95)':'rgba(200,180,120,0.80)';
-    const barH=Math.floor(22*DS);
-    oct.fillStyle='rgba(0,0,0,0.65)'; oct.fillRect(0,0,oc.width,barH);
-    oct.font=`${Math.floor(11*DS)}px 'Special Elite'`;
+    const barH=Math.floor(30*DS);
+    oct.fillStyle='rgba(0,0,0,0.72)'; oct.fillRect(0,0,oc.width,barH);
+    oct.font=`${Math.floor(14*DS)}px 'Special Elite'`;
     oct.textAlign='center'; oct.textBaseline='middle';
     oct.fillStyle=col; oct.fillText(obj,oc.width/2,barH/2);
+  }
+
+  // ── Timer box (top-right, below objective banner) ──
+  if(gameState==='inside'&&!scareActive&&timerActive&&!timerExpired){
+    const secLeft=Math.ceil(gameTimer/1000);
+    const mins=Math.floor(secLeft/60), secs=secLeft%60;
+    const tStr=`${mins}:${secs<10?'0':''}${secs}`;
+    const critical=secLeft<=30, warn=secLeft<=60;
+    const pulse=0.65+0.35*Math.sin(Date.now()*0.009*(critical?3.5:warn?1.8:0.6));
+    const tSize=Math.floor(20*DS);
+    const bPad=Math.floor(5*DS);
+    const bW=Math.floor(72*DS);
+    const bH=tSize+bPad*2+Math.floor(8*DS); // extra room for "TIME" label
+    const bX=oc.width-bW-Math.floor(8*DS);
+    const bY=Math.floor(36*DS); // sits just below the objective bar
+    // dark background
+    oct.fillStyle='rgba(4,2,1,0.84)';
+    oct.fillRect(bX,bY,bW,bH);
+    // border — color & pulse with urgency
+    oct.strokeStyle=critical?`rgba(210,35,35,${pulse})`
+      :warn?`rgba(195,108,22,0.85)`:`rgba(100,80,36,0.65)`;
+    oct.lineWidth=Math.max(1,Math.floor(1.2*DS));
+    oct.strokeRect(bX,bY,bW,bH);
+    // "TIME" label at top of box
+    oct.font=`${Math.floor(7*DS)}px 'Special Elite'`;
+    oct.textAlign='center'; oct.textBaseline='top';
+    oct.fillStyle=critical?`rgba(175,28,28,${pulse*0.8})`:'rgba(110,90,45,0.55)';
+    oct.fillText('TIME',bX+bW/2,bY+Math.floor(3*DS));
+    // time digits — big and readable
+    oct.font=`${tSize}px 'Special Elite'`;
+    oct.textBaseline='middle';
+    oct.fillStyle=critical?`rgba(245,38,38,${pulse})`
+      :warn?`rgba(225,118,28,0.96)`:`rgba(195,170,98,0.92)`;
+    oct.fillText(tStr,bX+bW/2,bY+bH*0.62);
   }
 
   // ── Controls overlay — shown for first 12 seconds ──
@@ -2248,25 +2377,177 @@ function render(ts){
       'F — Flashlight',
       'Shift — Sprint',
     ];
-    const lh=Math.floor(14*DS), pad=Math.floor(12*DS);
+    const lh=Math.floor(18*DS), pad=Math.floor(14*DS);
     const bh=lines.length*lh+pad*2;
-    const bw=Math.floor(200*DS);
-    const bx=Math.floor(8*DS), by=oc.height/2-bh/2;
-    oct.fillStyle=`rgba(0,0,0,${a*0.72})`;
+    const bw=Math.floor(260*DS);
+    const bx=Math.floor(10*DS), by=oc.height/2-bh/2;
+    oct.fillStyle=`rgba(0,0,0,${a*0.80})`;
     oct.fillRect(bx,by,bw,bh);
-    oct.strokeStyle=`rgba(100,80,40,${a*0.6})`; oct.lineWidth=1;
+    oct.strokeStyle=`rgba(120,95,45,${a*0.7})`; oct.lineWidth=Math.max(1,Math.floor(1.5*DS));
     oct.strokeRect(bx,by,bw,bh);
-    oct.font=`${Math.floor(8*DS)}px 'Special Elite'`;
+    oct.font=`${Math.floor(11*DS)}px 'Special Elite'`;
     oct.textAlign='left'; oct.textBaseline='middle';
     lines.forEach((l,i)=>{
-      oct.fillStyle=`rgba(190,170,100,${a*0.88})`;
+      oct.fillStyle=`rgba(210,185,110,${a*0.92})`;
       oct.fillText(l, bx+pad, by+pad+i*lh+lh/2);
     });
-    oct.font=`${Math.floor(7*DS)}px 'Special Elite'`;
-    oct.fillStyle=`rgba(120,100,60,${a*0.6})`;
+    oct.font=`${Math.floor(9*DS)}px 'Special Elite'`;
+    oct.fillStyle=`rgba(140,115,60,${a*0.65})`;
     oct.textAlign='center';
-    oct.fillText('CONTROLS',bx+bw/2,by+Math.floor(6*DS));
+    oct.fillText('CONTROLS',bx+bw/2,by+Math.floor(7*DS));
   }
+}
+
+// ── ESCAPE SEQUENCE ───────────────────────────────────────────────────────────
+function startEscapeSequence(){
+  timerExpired=true; timerActive=false;
+  document.getElementById('choice').classList.remove('active');
+  finalChoice='obey'; saveState();
+  gameState='escape';
+  player.x=2.5; player.y=33.0; player.angle=-Math.PI/2;
+  escapeMonX=2.5; escapeMonY=34.9;
+  escapeCaptured=false; escapeWon=false;
+  escapeTimer=0; escapeMonActive=false; escapeIntroTimer=0;
+  stamina=1; exhausted=false; exhaustTimer=0;
+  flashlightOn=true; callerActive=false; scareActive=false;
+  heartTimer=0; footTimer=0; postScareRed=0;
+  document.getElementById('escape-restart-btn').style.display='block';
+  initAudio(); resumeAudio();
+  canvas.requestPointerLock();
+}
+
+function updateEscape(dt){
+  if(escapeCaptured||escapeWon)return;
+  escapeTimer+=dt;
+
+  // 2-second intro before monster activates
+  if(!escapeMonActive){
+    escapeIntroTimer+=dt;
+    if(escapeIntroTimer>2000){
+      escapeMonActive=true;
+      noise(0.07,1.6,150,4500);
+      tone(52,1.8,1.0,'sawtooth');
+    }
+    return;
+  }
+
+  // Chase — move monster toward player
+  const dx=player.x-escapeMonX, dy=player.y-escapeMonY;
+  const dist=Math.sqrt(dx*dx+dy*dy)||1;
+  // Accelerates over time; sprint (4.1 t/s) still edges it at start
+  const speed=(0.0023+Math.min(0.0018,escapeTimer*0.000032))*dt;
+  const nmx=escapeMonX+dx/dist*speed;
+  const nmy=escapeMonY+dy/dist*speed;
+  const PAD=0.22;
+  if(!mapAt(nmx+Math.sign(dx)*PAD,escapeMonY)) escapeMonX=nmx;
+  if(!mapAt(escapeMonX,nmy+Math.sign(dy)*PAD)) escapeMonY=nmy;
+
+  // Capture
+  if(dist<1.35){
+    escapeCaptured=true;
+    document.getElementById('escape-restart-btn').style.display='none';
+    timerJSActive=true; timerJSFrame=0;
+    playTimerJumpscare();
+    return;
+  }
+
+  // Win — reached the door
+  if(player.y<1.8){
+    escapeWon=true;
+    document.getElementById('escape-restart-btn').style.display='none';
+    document.exitPointerLock();
+    setTimeout(()=>{ gameState='inside'; showEnding(ENDING_OBEY); },600);
+  }
+}
+
+function renderEscapeOverlay(){
+  // Red vignette based on monster proximity
+  if(escapeMonActive){
+    const md=Math.hypot(escapeMonX-player.x,escapeMonY-player.y);
+    const prox=Math.max(0,1-md/10);
+    if(prox>0){
+      const vg=ctx.createRadialGradient(W/2,H/2,H*0.12,W/2,H/2,H*0.72);
+      vg.addColorStop(0,'rgba(0,0,0,0)');
+      vg.addColorStop(1,`rgba(140,0,0,${prox*0.7})`);
+      ctx.fillStyle=vg; ctx.fillRect(0,0,W,H);
+    }
+    // Screen shake when very close
+    if(md<2.5){
+      const shk=(2.5-md)/2.5;
+      ctx.save();
+      ctx.translate((Math.random()-0.5)*shk*10,(Math.random()-0.5)*shk*6);
+      ctx.fillStyle='rgba(0,0,0,0)'; ctx.fillRect(0,0,1,1); // dummy to apply transform
+      ctx.restore();
+    }
+  }
+
+  // Overlay canvas HUD
+  const distToDoor=Math.max(0,player.y-1.0);
+  const pct=Math.min(1,1-distToDoor/32);
+  const banH=Math.floor(30*DS);
+
+  // Top banner
+  oct.fillStyle='rgba(0,0,0,0.75)'; oct.fillRect(0,0,oc.width,banH);
+  // Progress strip
+  oct.fillStyle=`rgba(${~~(50+pct*180)},${~~(5+pct*12)},8,0.85)`;
+  oct.fillRect(0,banH-Math.floor(2*DS),Math.floor(oc.width*pct),Math.floor(2*DS));
+  oct.font=`${Math.floor(14*DS)}px 'Special Elite'`;
+  oct.textAlign='center'; oct.textBaseline='middle';
+  oct.fillStyle='rgba(210,170,80,0.92)';
+  oct.fillText('REACH THE DOOR',oc.width/2,banH/2);
+
+  // Distance box top-right
+  const dStr=`${Math.ceil(distToDoor)}m`;
+  const bW=Math.floor(58*DS), bH=Math.floor(32*DS);
+  const bX=oc.width-bW-Math.floor(8*DS), bY=banH+Math.floor(6*DS);
+  oct.fillStyle='rgba(5,1,1,0.88)'; oct.fillRect(bX,bY,bW,bH);
+  oct.strokeStyle='rgba(190,35,18,0.75)'; oct.lineWidth=Math.max(1,Math.floor(DS));
+  oct.strokeRect(bX,bY,bW,bH);
+  oct.font=`${Math.floor(17*DS)}px 'Special Elite'`;
+  oct.textAlign='center'; oct.textBaseline='middle';
+  oct.fillStyle='rgba(230,70,40,0.96)';
+  oct.fillText(dStr,bX+bW/2,bY+bH/2);
+
+  // "NOW RUN" intro message
+  if(!escapeMonActive){
+    const fadeA=Math.min(1,escapeIntroTimer/400)*Math.min(1,(2000-escapeIntroTimer)/400);
+    if(fadeA>0){
+      oct.font=`${Math.floor(22*DS)}px 'Special Elite'`;
+      oct.textAlign='center'; oct.textBaseline='middle';
+      oct.fillStyle=`rgba(210,45,28,${fadeA})`;
+      oct.fillText('YOU OBEYED.',oc.width/2,oc.height/2-Math.floor(22*DS));
+      oct.font=`${Math.floor(16*DS)}px 'Special Elite'`;
+      oct.fillStyle=`rgba(190,160,60,${fadeA*0.8})`;
+      oct.fillText('NOW RUN.',oc.width/2,oc.height/2+Math.floor(8*DS));
+    }
+  }
+
+  // Stamina bar
+  if(stamina<0.99){
+    const sW=Math.floor(110*DS),sH=Math.floor(3*DS);
+    const sx=oc.width/2-sW/2, sy=oc.height-Math.floor(10*DS);
+    const a=stamina<0.88?1:(0.99-stamina)/0.11;
+    oct.fillStyle=`rgba(8,5,1,${a*0.72})`; oct.fillRect(sx-2,sy-2,sW+4,sH+4);
+    const sc=exhausted?`rgba(140,35,20,${a*0.95})`:stamina<0.30?`rgba(145,82,22,${a*0.9})`:`rgba(120,88,30,${a*0.85})`;
+    oct.fillStyle=sc; oct.fillRect(sx,sy,Math.floor(sW*stamina),sH);
+    oct.strokeStyle=`rgba(80,60,18,${a*0.55})`; oct.lineWidth=1;
+    oct.strokeRect(sx,sy,sW,sH);
+  }
+
+  // [E] EXIT prompt when at door
+  if(distToDoor<4){
+    const ea=Math.min(1,(4-distToDoor)/4);
+    oct.font=`${Math.floor(14*DS)}px 'Special Elite'`;
+    oct.textAlign='center'; oct.textBaseline='bottom';
+    oct.fillStyle=`rgba(220,190,80,${ea*0.92})`;
+    oct.fillText('[ E ]  EXIT',oc.width/2,oc.height-Math.floor(30*DS));
+  }
+
+  // Crosshair
+  const cx=oc.width/2,cy=oc.height/2,arm=Math.floor(6*DS);
+  oct.strokeStyle='rgba(200,184,128,0.28)'; oct.lineWidth=1;
+  oct.beginPath();oct.moveTo(cx-arm,cy);oct.lineTo(cx+arm,cy);oct.stroke();
+  oct.beginPath();oct.moveTo(cx,cy-arm);oct.lineTo(cx,cy+arm);oct.stroke();
 }
 
 // ── MAIN LOOP ─────────────────────────────────────────────────────────────────
@@ -2304,6 +2585,29 @@ function loop(ts){
     requestAnimationFrame(loop); return;
   }
   if(gameState==='gameover'){ return; }
+
+  // ── escape run ──
+  if(gameState==='escape'){
+    move(dt);
+    const movE=Math.abs(player.x-lastPX)>0.001||Math.abs(player.y-lastPY)>0.001;
+    const spE=(keys['ShiftLeft']||keys['ShiftRight'])&&movE&&!exhausted;
+    footTimer=movE?footTimer+dt:0;
+    if(footTimer>(spE?240:400)){playFootstep();footTimer=0;}
+    heartTimer+=dt;
+    const mDE=escapeMonActive?Math.hypot(escapeMonX-player.x,escapeMonY-player.y):Infinity;
+    heartInterval=mDE<4?210:mDE<8?360:680;
+    if(heartTimer>=heartInterval){playHeartbeat();heartTimer=0;}
+    lastPX=player.x; lastPY=player.y;
+    updateEscape(dt);
+    if(!timerJSActive){
+      renderWalls(ts);
+      renderSprites(ts); // returns escape monster only
+      ctx.putImageData(imgData,0,0);
+      oct.clearRect(0,0,oc.width,oc.height);
+      renderEscapeOverlay();
+    }
+    requestAnimationFrame(loop); return;
+  }
 
   // ── inside ──
   if(!timerActive&&gameState==='inside') timerActive=true;
