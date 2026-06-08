@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>HOMEBOUND</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
@@ -56,6 +57,7 @@
     background:none; border:1px solid #8a7850; color:#c8b880;
     font-family:'Special Elite',cursive; font-size:0.95rem;
     padding:0.55rem 2rem; cursor:pointer; letter-spacing:0.15em;
+    touch-action:manipulation; -webkit-tap-highlight-color:transparent;
   }
   .hb-btn:hover { border-color:#dcc060; color:#dcc060; }
   #inspect-box {
@@ -78,6 +80,7 @@
     font-family:'Special Elite',cursive; font-size:0.7rem;
     padding:5px 10px; cursor:pointer; letter-spacing:0.12em;
     transition:border-color 0.2s, color 0.2s;
+    touch-action:manipulation; -webkit-tap-highlight-color:transparent;
   }
   #restart-btn:hover { border-color:#8a7850; color:#c8b880; }
   #escape-restart-btn {
@@ -175,6 +178,7 @@
     color:rgba(160,138,90,0.55); font-family:'Special Elite',serif;
     font-size:0.7rem; letter-spacing:0.18em; padding:0.35rem 0.9rem;
     cursor:pointer; transition:color 0.2s, border-color 0.2s;
+    touch-action:manipulation; -webkit-tap-highlight-color:transparent;
   }
   .skip-btn:hover { color:rgba(210,185,110,0.9); border-color:rgba(180,150,70,0.7); }
 
@@ -219,8 +223,61 @@
   .ecs-lines .cs-tag  { font-size:0.85rem; color:#8a6840; letter-spacing:0.3em; }
   .ecs-lines .cs-red  { font-size:1.5rem; color:#c84030; letter-spacing:0.2em; font-family:'Special Elite',serif; }
   .ecs-continue { opacity:0; margin-top:2.5rem; animation:fadeUp 1s forwards; }
+
+  /* ── MOBILE CONTROLS ─────────────────────────────────────── */
+  #mob-mode-btn {
+    margin-top:0.8rem; font-size:0.72rem; opacity:0.62;
+    letter-spacing:0.18em; position:relative; z-index:2;
+  }
+  #mob-mode-btn:hover { opacity:1; }
+  #mob-mode-btn.active { border-color:#90b878; color:#b0e098; opacity:1; }
+
+  #mobile-controls {
+    display:none; position:fixed; inset:0; z-index:18;
+    pointer-events:none; touch-action:none;
+  }
+  #mob-joy-zone {
+    position:absolute; left:0; top:0; bottom:0; width:44%;
+    pointer-events:all; touch-action:none;
+  }
+  #mob-look-zone {
+    position:absolute; right:0; top:0; bottom:0; width:56%;
+    pointer-events:all; touch-action:none;
+  }
+  #mob-joy-vis {
+    position:absolute; width:114px; height:114px;
+    border-radius:50%;
+    border:1.5px solid rgba(180,140,60,0.36);
+    background:rgba(0,0,0,0.20);
+    display:none; pointer-events:none;
+    transform:translate(-50%,-50%);
+  }
+  #mob-joy-knob {
+    position:absolute; width:46px; height:46px; border-radius:50%;
+    background:rgba(200,165,80,0.70);
+    border:1px solid rgba(225,195,100,0.55);
+    top:50%; left:50%; transform:translate(-50%,-50%);
+  }
+  .mob-btn {
+    position:absolute; pointer-events:all; touch-action:manipulation;
+    background:rgba(4,2,1,0.78); border:1px solid rgba(180,140,60,0.38);
+    color:rgba(200,165,80,0.82); font-family:'Special Elite',cursive;
+    font-size:0.60rem; letter-spacing:0.14em; border-radius:8px;
+    min-width:62px; min-height:62px; cursor:pointer; user-select:none;
+    display:flex; align-items:center; justify-content:center;
+    flex-direction:column; gap:3px; line-height:1.1;
+    -webkit-tap-highlight-color:transparent;
+  }
+  .mob-btn:active { background:rgba(20,12,3,0.90); border-color:rgba(220,180,70,0.65); }
+  .mob-btn-icon { font-size:1.1rem; }
+  /* Flash and Notes on left side (outside of look zone) */
+  #mob-flash { left:14px; bottom:92px; }
+  #mob-notes { left:14px; bottom:20px; }
+  /* USE button centered bottom */
+  #mob-use   { left:50%; transform:translateX(-50%); bottom:20px; min-width:72px; }
 </style>
 <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Special+Elite&family=Crimson+Text:ital@0;1&display=swap" rel="stylesheet">
 </head>
 <body>
@@ -231,6 +288,7 @@
   <h1>HOMEBOUND</h1>
   <p>You come home. The house is empty.</p>
   <button class="hb-btn" id="startBtn">ENTER</button>
+  <button class="hb-btn" id="mob-mode-btn">PLAY ON PHONE</button>
 </div>
 
 <div id="inspect" class="screen">
@@ -325,6 +383,16 @@
 
 <button id="restart-btn" title="Restart from the beginning">↺ RESTART</button>
 <button id="escape-restart-btn" style="display:none">↺ RESTART RUN</button>
+
+<!-- Mobile touch controls (shown only in mobile mode) -->
+<div id="mobile-controls">
+  <div id="mob-joy-zone"></div>
+  <div id="mob-look-zone"></div>
+  <div id="mob-joy-vis"><div id="mob-joy-knob"></div></div>
+  <button class="mob-btn" id="mob-flash"><span class="mob-btn-icon">&#9679;</span>LIGHT</button>
+  <button class="mob-btn" id="mob-notes"><span class="mob-btn-icon">&#128211;</span>NOTES</button>
+  <button class="mob-btn" id="mob-use"><span class="mob-btn-icon">&#9654;</span>USE</button>
+</div>
 
 <div id="wrap">
   <canvas id="c"></canvas>
@@ -512,6 +580,8 @@ const CAM_PLANE=Math.tan(FOV/2);
 
 const keys={};
 let mouseX=0, pointerLocked=false;
+let mobileMode=false;
+function lockPointer(){ if(!mobileMode) canvas.requestPointerLock(); }
 let lastTime=0, saveTimer=0;
 
 let foundWords=[], scaresFired=new Set();
@@ -644,7 +714,131 @@ addEventListener('keydown',e=>{
 addEventListener('keyup',e=>{ keys[e.code]=false; });
 canvas.addEventListener('mousemove',e=>{ if(pointerLocked)mouseX+=e.movementX; });
 document.addEventListener('pointerlockchange',()=>{ pointerLocked=document.pointerLockElement===canvas; });
-canvas.addEventListener('click',()=>{ initAudio(); resumeAudio(); if(!inspectOpen&&!pointerLocked)canvas.requestPointerLock(); });
+canvas.addEventListener('click',()=>{ initAudio(); resumeAudio(); if(!inspectOpen&&!pointerLocked)lockPointer(); });
+
+// ── MOBILE ───────────────────────────────────────────────────────────────────
+let mobJoyId=-1, mobJoyBaseX=0, mobJoyBaseY=0, mobJoyDX=0, mobJoyDY=0;
+let mobLookId=-1, mobLookLastX=0;
+const MOB_JOY_R=57; // half-diameter = max knob travel
+
+function processMobileInput(){
+  if(!mobileMode)return;
+  const dead=14;
+  keys['KeyW']=mobJoyId!==-1&&mobJoyDY<-dead;
+  keys['KeyS']=mobJoyId!==-1&&mobJoyDY>dead;
+  keys['KeyA']=mobJoyId!==-1&&mobJoyDX<-dead;
+  keys['KeyD']=mobJoyId!==-1&&mobJoyDX>dead;
+  const dist=Math.sqrt(mobJoyDX*mobJoyDX+mobJoyDY*mobJoyDY);
+  keys['ShiftLeft']=mobJoyId!==-1&&dist>MOB_JOY_R*0.68;
+}
+
+function initMobileControls(){
+  const joyZone=document.getElementById('mob-joy-zone');
+  const lookZone=document.getElementById('mob-look-zone');
+  const joyVis=document.getElementById('mob-joy-vis');
+  const joyKnob=document.getElementById('mob-joy-knob');
+
+  function knobPos(){
+    const clampR=MOB_JOY_R;
+    const cx=Math.max(-clampR,Math.min(clampR,mobJoyDX));
+    const cy=Math.max(-clampR,Math.min(clampR,mobJoyDY));
+    joyKnob.style.left=`calc(50% + ${cx}px)`;
+    joyKnob.style.top=`calc(50% + ${cy}px)`;
+    joyKnob.style.transform='translate(-50%,-50%)';
+  }
+
+  joyZone.addEventListener('touchstart',e=>{
+    e.preventDefault();
+    for(const t of e.changedTouches){
+      if(mobJoyId===-1){
+        mobJoyId=t.identifier; mobJoyBaseX=t.clientX; mobJoyBaseY=t.clientY;
+        mobJoyDX=0; mobJoyDY=0;
+        joyVis.style.left=t.clientX+'px'; joyVis.style.top=t.clientY+'px';
+        joyVis.style.display='block'; knobPos();
+        initAudio(); resumeAudio();
+      }
+    }
+  },{passive:false});
+  joyZone.addEventListener('touchmove',e=>{
+    e.preventDefault();
+    for(const t of e.changedTouches){
+      if(t.identifier===mobJoyId){
+        mobJoyDX=t.clientX-mobJoyBaseX; mobJoyDY=t.clientY-mobJoyBaseY; knobPos();
+      }
+    }
+  },{passive:false});
+  function joyUp(e){
+    e.preventDefault();
+    for(const t of e.changedTouches){
+      if(t.identifier===mobJoyId){ mobJoyId=-1; mobJoyDX=0; mobJoyDY=0; joyVis.style.display='none'; }
+    }
+  }
+  joyZone.addEventListener('touchend',joyUp,{passive:false});
+  joyZone.addEventListener('touchcancel',joyUp,{passive:false});
+
+  lookZone.addEventListener('touchstart',e=>{
+    e.preventDefault();
+    for(const t of e.changedTouches){
+      if(mobLookId===-1){ mobLookId=t.identifier; mobLookLastX=t.clientX; initAudio(); resumeAudio(); }
+    }
+  },{passive:false});
+  lookZone.addEventListener('touchmove',e=>{
+    e.preventDefault();
+    for(const t of e.changedTouches){
+      if(t.identifier===mobLookId){ mouseX+=(t.clientX-mobLookLastX)*3.5; mobLookLastX=t.clientX; }
+    }
+  },{passive:false});
+  function lookUp(e){
+    e.preventDefault();
+    for(const t of e.changedTouches){ if(t.identifier===mobLookId) mobLookId=-1; }
+  }
+  lookZone.addEventListener('touchend',lookUp,{passive:false});
+  lookZone.addEventListener('touchcancel',lookUp,{passive:false});
+
+  // Flashlight button
+  document.getElementById('mob-flash').addEventListener('touchstart',e=>{
+    e.preventDefault(); e.stopPropagation();
+    if(gameState==='inside'||gameState==='escape') flashlightOn=!flashlightOn;
+    initAudio(); resumeAudio();
+    document.getElementById('mob-flash').querySelector('.mob-btn-icon').textContent=flashlightOn?'●':'○';
+  },{passive:false});
+
+  // Notes button (toggle notebook)
+  document.getElementById('mob-notes').addEventListener('touchstart',e=>{
+    e.preventDefault(); e.stopPropagation();
+    if(gameState==='inside'&&!inspectOpen&&!scareActive){
+      if(!safeUnlocked){
+        hintMsg="Find the safe first."; hintTimer=2500;
+      } else {
+        notebookOpen?closeNotebook():openNotebook();
+      }
+    }
+  },{passive:false});
+
+  // USE / interact button
+  document.getElementById('mob-use').addEventListener('touchstart',e=>{
+    e.preventDefault(); e.stopPropagation();
+    initAudio(); resumeAudio();
+    // Simulate E key press
+    const ev=new KeyboardEvent('keydown',{code:'KeyE',bubbles:true});
+    document.dispatchEvent(ev);
+    setTimeout(()=>{ const ev2=new KeyboardEvent('keyup',{code:'KeyE',bubbles:true}); document.dispatchEvent(ev2); },80);
+  },{passive:false});
+}
+
+// ── MOBILE START BUTTON ───────────────────────────────────────────────────────
+document.getElementById('mob-mode-btn').addEventListener('click',()=>{
+  mobileMode=true;
+  document.getElementById('mob-mode-btn').classList.add('active');
+  document.getElementById('mobile-controls').style.display='block';
+  initMobileControls();
+  // Start game
+  document.getElementById('start').classList.remove('active');
+  document.getElementById('title-caller').style.display='none';
+  document.getElementById('title-caller-eyes').style.display='none';
+  loadState();
+  requestAnimationFrame(loop);
+});
 
 // ── INSPECT MODAL ────────────────────────────────────────────────────────────
 function openInspect(clue){
@@ -657,7 +851,7 @@ function openInspect(clue){
 function closeInspect(){
   inspectOpen=false; activeClue=null;
   document.getElementById('inspect').classList.remove('active');
-  canvas.requestPointerLock();
+  lockPointer();
 }
 document.getElementById('takeBtn').addEventListener('click',()=>{
   if(!activeClue)return;
@@ -678,7 +872,7 @@ function openNotebook(){
 function closeNotebook(){
   notebookOpen=false;
   document.getElementById('notebook').classList.remove('active');
-  canvas.requestPointerLock();
+  lockPointer();
 }
 function renderNotebook(){
   const foundEl=document.getElementById('nb-found');
@@ -918,8 +1112,7 @@ document.getElementById('startBtn').addEventListener('click',()=>{
   document.getElementById('title-caller').style.display='none';
   document.getElementById('title-caller-eyes').style.display='none';
   loadState();
-  // pointer lock only needed once player is inside
-  if(gameState==='inside') canvas.requestPointerLock();
+  if(gameState==='inside') lockPointer();
   requestAnimationFrame(loop);
 });
 
@@ -978,7 +1171,7 @@ function showCutscene(){
 }
 function enterFromCutscene(){
   document.getElementById('cutscene').classList.remove('active');
-  gameState='inside'; canvas.requestPointerLock(); saveState();
+  gameState='inside'; lockPointer(); saveState();
 }
 document.getElementById('cutscene-continue').addEventListener('click',enterFromCutscene);
 document.getElementById('skip-cutscene').addEventListener('click',enterFromCutscene);
@@ -1941,6 +2134,7 @@ function move(dt){
   if(gameState==='outside'){
     if(keys['KeyW']||keys['ArrowUp'])   approachProgress=Math.min(1,approachProgress+dt*0.00042);
     if(keys['KeyS']||keys['ArrowDown']) approachProgress=Math.max(0,approachProgress-dt*0.00042);
+    mouseX=0; // drain mobile look delta so it doesn't fire all at once on entry
     return;
   }
   if(gameState!=='inside'&&gameState!=='escape')return;
@@ -2413,7 +2607,7 @@ function startEscapeSequence(){
   heartTimer=0; footTimer=0; postScareRed=0;
   document.getElementById('escape-restart-btn').style.display='block';
   initAudio(); resumeAudio();
-  canvas.requestPointerLock();
+  lockPointer();
 }
 
 function updateEscape(dt){
@@ -2553,6 +2747,7 @@ function renderEscapeOverlay(){
 // ── MAIN LOOP ─────────────────────────────────────────────────────────────────
 function loop(ts){
   const dt=Math.min(100,ts-lastTime); lastTime=ts;
+  processMobileInput();
 
   // ── outside ──
   if(gameState==='outside'||gameState==='entering'){
