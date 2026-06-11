@@ -381,6 +381,24 @@
   <button class="skip-btn" id="skip-cutscene">SKIP ›</button>
 </div>
 
+<!-- Level 2 intro cutscene -->
+<div id="level2-intro" class="screen">
+  <div class="ecs-box">
+    <div class="ecs-lines" id="level2-intro-lines"></div>
+    <button class="hb-btn ecs-continue" id="level2-intro-btn" style="display:none">SEARCH THE HOUSE →</button>
+  </div>
+  <button class="skip-btn" id="skip-level2-intro">SKIP ›</button>
+</div>
+
+<!-- Level 2 ending cutscene — the monster awakens -->
+<div id="level2-end" class="screen">
+  <div class="ecs-box">
+    <div class="ecs-lines" id="level2-end-lines"></div>
+    <button class="hb-btn ecs-continue" id="level2-end-btn" style="display:none">PLAY AGAIN</button>
+  </div>
+  <button class="skip-btn" id="skip-level2-end">SKIP ›</button>
+</div>
+
 <button id="restart-btn" title="Restart from the beginning">↺ RESTART</button>
 <button id="escape-restart-btn" style="display:none">↺ RESTART RUN</button>
 
@@ -501,6 +519,11 @@ function mapAt(x,y){
   }
   const xi=Math.floor(x),yi=Math.floor(y);
   if(xi<0||xi>=MAP_W||yi<0||yi>=MAP_H)return 1;
+  if(level===2){
+    for(const f of FAMILY_MEMBERS){
+      if(f.doorX===xi&&f.doorY===yi&&!doorsOpen.has(f.name))return 1;
+    }
+  }
   return MAP[yi*MAP_W+xi];
 }
 
@@ -536,6 +559,45 @@ const SCARE_ZONES = [
 // ── KEY & SAFE ────────────────────────────────────────────────────────────────
 const KEY_ITEM = {x:5.5, y:2.5};   // hidden in the Library
 const SAFE_OBJ = {x:13.5, y:18.5}; // locked in the Basement Area
+
+// ── CEILING LIGHTS & CABINETS (hide-or-die mechanic) ──────────────────────────
+const CEILING_LIGHTS=[
+  {x:13.5,y:8.5},  // Upper hallway
+  {x:4.5, y:11.5}, // Living Room
+  {x:13.5,y:11.5}, // Entrance Hall
+  {x:22.5,y:11.5}, // Dining Room
+  {x:13.5,y:3.5},  // Master Bedroom
+  {x:22.5,y:17.5}, // Kitchen
+];
+const CABINETS=[
+  {x:2.5, y:1.5},  // Library
+  {x:9.5, y:1.5},  // Master Bedroom (NW corner)
+  {x:11.5,y:5.5},  // Master Bedroom (near hallway door)
+  {x:21.5,y:2.5},  // Bedroom 2
+  {x:1.5, y:13.5}, // Living Room
+  {x:7.5, y:11.5}, // Living Room (east side)
+  {x:11.5,y:13.5}, // Entrance Hall
+  {x:16.5,y:11.5}, // Entrance Hall
+  {x:25.5,y:13.5}, // Dining Room
+  {x:24.5,y:10.5}, // Dining Room (north)
+  {x:1.5, y:18.5}, // Sitting Room
+  {x:16.5,y:17.5}, // Basement Area
+  {x:20.5,y:16.5}, // Kitchen (north)
+  {x:25.5,y:18.5}, // Kitchen
+];
+const CEILING_WARN_MS=5000; // how long the lights flicker before they flash (gives the player time to hide)
+
+// ── LEVEL 2 — search the house and find your family ───────────────────────────
+const FAMILY_MEMBERS=[
+  {name:'mother',  label:'MOM',          x:13.5, y:5.5,  doorX:12, doorY:7,
+   foundMsg:"Mom is alive. She grabs your hand and won't let go."},
+  {name:'father',  label:'DAD',          x:14.5, y:16.5, doorX:13, doorY:15,
+   foundMsg:'Dad is curled in the corner of the basement, shaking. He looks up at you and starts to cry.'},
+  {name:'brother', label:'YOUR BROTHER', x:20.5, y:10.5, doorX:19, doorY:9,
+   foundMsg:'Your little brother was hiding under the dining table the whole time.'},
+  {name:'sister',  label:'YOUR SISTER',  x:22.5, y:4.5,  doorX:21, doorY:7,
+   foundMsg:"Your sister is curled up under her bed, clutching a flashlight that won't turn on."},
+];
 
 // Pre-seeded crack paths (4 variants × 8 cracks × 5 segments)
 const CRACK_PATHS = Array.from({length:4},(_,v)=>
@@ -620,6 +682,18 @@ let hasKey=false, safeUnlocked=false;
 let nearbyKey=false, nearbySafe=false;
 let hintMsg='', hintTimer=0;
 
+// ── Ceiling light flash / cabinet hiding ──
+let nearbyCabinet=false, hidingInCabinet=false;
+let ceilingPhase='idle';              // 'idle' | 'warning' | 'flash'
+let ceilingPhaseTimer=0;
+let ceilingNextIn=16000+Math.random()*9000; // ms until next light flicker warning
+let ceilingFlashWhite=0;
+
+// ── LEVEL 2 state ──
+let level=1;                  // 1 = escape the voices, 2 = find your family
+let nearbyFamily=null, familyFound=[];
+let nearbyDoor=null, doorsOpen=new Set(); // closed bedroom/basement doors hiding family members
+
 // ── THE CALLER ────────────────────────────────────────────────────────────────
 // Good hallway-end / doorway spots in the 28×20 mansion
 const HAUNT_POSITIONS=[
@@ -675,11 +749,31 @@ addEventListener('keydown',e=>{
       escapeWon=true;
       document.getElementById('escape-restart-btn').style.display='none';
       document.exitPointerLock();
-      setTimeout(()=>{ gameState='inside'; showEnding(ENDING_OBEY); },600);
+      setTimeout(()=>{ gameState='inside'; showLevel2Intro(); },600);
       return;
     }
     if(gameState==='outside'&&approachProgress>=0.88){startEntering();return;}
     if(gameState==='inside'&&!inspectOpen&&!scareActive&&!notebookOpen){
+      // Leave / enter cabinet
+      if(hidingInCabinet){ hidingInCabinet=false; e.preventDefault(); return; }
+      if(nearbyCabinet){ hidingInCabinet=true; e.preventDefault(); return; }
+      // Open a closed bedroom/basement door (Level 2)
+      if(level===2&&nearbyDoor){
+        doorsOpen.add(nearbyDoor.name);
+        whiteFlash=0.25; playDoorCreak(); saveState();
+        hintMsg='The door creaks open...'; hintTimer=2200;
+        e.preventDefault(); return;
+      }
+      // Reach a family member (Level 2)
+      if(level===2&&nearbyFamily){
+        familyFound.push(nearbyFamily.name);
+        whiteFlash=0.8; playRevealChime(); saveState();
+        hintMsg=nearbyFamily.foundMsg; hintTimer=5500;
+        if(familyFound.length>=FAMILY_MEMBERS.length){
+          setTimeout(showLevel2End,2400);
+        }
+        e.preventDefault(); return;
+      }
       // Pick up key
       if(nearbyKey&&!hasKey){
         hasKey=true; whiteFlash=0.7; playWordChime(); saveState();
@@ -702,7 +796,7 @@ addEventListener('keydown',e=>{
       }
     }
   }
-  if(e.code==='KeyN'&&gameState==='inside'&&!inspectOpen&&!scareActive&&!sentenceDone){
+  if(e.code==='KeyN'&&gameState==='inside'&&!inspectOpen&&!scareActive&&!sentenceDone&&!hidingInCabinet){
     if(!safeUnlocked){
       hintMsg='You don\'t have the notebook yet. Find the safe first.'; hintTimer=3000;
       e.preventDefault(); return;
@@ -739,91 +833,78 @@ function initMobileControls(){
   const joyKnob=document.getElementById('mob-joy-knob');
 
   function knobPos(){
-    const clampR=MOB_JOY_R;
-    const cx=Math.max(-clampR,Math.min(clampR,mobJoyDX));
-    const cy=Math.max(-clampR,Math.min(clampR,mobJoyDY));
+    const cx=Math.max(-MOB_JOY_R,Math.min(MOB_JOY_R,mobJoyDX));
+    const cy=Math.max(-MOB_JOY_R,Math.min(MOB_JOY_R,mobJoyDY));
     joyKnob.style.left=`calc(50% + ${cx}px)`;
     joyKnob.style.top=`calc(50% + ${cy}px)`;
     joyKnob.style.transform='translate(-50%,-50%)';
   }
 
-  joyZone.addEventListener('touchstart',e=>{
+  // ── Joystick — Pointer Events (works for mouse AND touch) ──
+  joyZone.addEventListener('pointerdown',e=>{
+    if(mobJoyId!==-1)return;
+    e.preventDefault(); try{joyZone.setPointerCapture(e.pointerId);}catch(_){}
+    mobJoyId=e.pointerId; mobJoyBaseX=e.clientX; mobJoyBaseY=e.clientY;
+    mobJoyDX=0; mobJoyDY=0;
+    joyVis.style.left=e.clientX+'px'; joyVis.style.top=e.clientY+'px';
+    joyVis.style.display='block'; knobPos();
+    initAudio(); resumeAudio();
+  });
+  joyZone.addEventListener('pointermove',e=>{
+    if(e.pointerId!==mobJoyId)return;
     e.preventDefault();
-    for(const t of e.changedTouches){
-      if(mobJoyId===-1){
-        mobJoyId=t.identifier; mobJoyBaseX=t.clientX; mobJoyBaseY=t.clientY;
-        mobJoyDX=0; mobJoyDY=0;
-        joyVis.style.left=t.clientX+'px'; joyVis.style.top=t.clientY+'px';
-        joyVis.style.display='block'; knobPos();
-        initAudio(); resumeAudio();
-      }
-    }
-  },{passive:false});
-  joyZone.addEventListener('touchmove',e=>{
-    e.preventDefault();
-    for(const t of e.changedTouches){
-      if(t.identifier===mobJoyId){
-        mobJoyDX=t.clientX-mobJoyBaseX; mobJoyDY=t.clientY-mobJoyBaseY; knobPos();
-      }
-    }
-  },{passive:false});
+    mobJoyDX=e.clientX-mobJoyBaseX; mobJoyDY=e.clientY-mobJoyBaseY; knobPos();
+  });
   function joyUp(e){
+    if(e.pointerId!==mobJoyId)return;
     e.preventDefault();
-    for(const t of e.changedTouches){
-      if(t.identifier===mobJoyId){ mobJoyId=-1; mobJoyDX=0; mobJoyDY=0; joyVis.style.display='none'; }
-    }
+    mobJoyId=-1; mobJoyDX=0; mobJoyDY=0; joyVis.style.display='none';
   }
-  joyZone.addEventListener('touchend',joyUp,{passive:false});
-  joyZone.addEventListener('touchcancel',joyUp,{passive:false});
+  joyZone.addEventListener('pointerup',joyUp);
+  joyZone.addEventListener('pointercancel',joyUp);
 
-  lookZone.addEventListener('touchstart',e=>{
+  // ── Look zone — Pointer Events ──
+  lookZone.addEventListener('pointerdown',e=>{
+    if(mobLookId!==-1)return;
+    e.preventDefault(); try{lookZone.setPointerCapture(e.pointerId);}catch(_){}
+    mobLookId=e.pointerId; mobLookLastX=e.clientX;
+    initAudio(); resumeAudio();
+  });
+  lookZone.addEventListener('pointermove',e=>{
+    if(e.pointerId!==mobLookId)return;
     e.preventDefault();
-    for(const t of e.changedTouches){
-      if(mobLookId===-1){ mobLookId=t.identifier; mobLookLastX=t.clientX; initAudio(); resumeAudio(); }
-    }
-  },{passive:false});
-  lookZone.addEventListener('touchmove',e=>{
-    e.preventDefault();
-    for(const t of e.changedTouches){
-      if(t.identifier===mobLookId){ mouseX+=(t.clientX-mobLookLastX)*3.5; mobLookLastX=t.clientX; }
-    }
-  },{passive:false});
+    mouseX+=(e.clientX-mobLookLastX)*3.5; mobLookLastX=e.clientX;
+  });
   function lookUp(e){
-    e.preventDefault();
-    for(const t of e.changedTouches){ if(t.identifier===mobLookId) mobLookId=-1; }
+    if(e.pointerId!==mobLookId)return;
+    e.preventDefault(); mobLookId=-1;
   }
-  lookZone.addEventListener('touchend',lookUp,{passive:false});
-  lookZone.addEventListener('touchcancel',lookUp,{passive:false});
+  lookZone.addEventListener('pointerup',lookUp);
+  lookZone.addEventListener('pointercancel',lookUp);
 
-  // Flashlight button
-  document.getElementById('mob-flash').addEventListener('touchstart',e=>{
+  // ── Action buttons — pointerdown fires on click AND touch ──
+  document.getElementById('mob-flash').addEventListener('pointerdown',e=>{
     e.preventDefault(); e.stopPropagation();
     if(gameState==='inside'||gameState==='escape') flashlightOn=!flashlightOn;
     initAudio(); resumeAudio();
     document.getElementById('mob-flash').querySelector('.mob-btn-icon').textContent=flashlightOn?'●':'○';
-  },{passive:false});
+  });
 
-  // Notes button (toggle notebook)
-  document.getElementById('mob-notes').addEventListener('touchstart',e=>{
+  document.getElementById('mob-notes').addEventListener('pointerdown',e=>{
     e.preventDefault(); e.stopPropagation();
-    if(gameState==='inside'&&!inspectOpen&&!scareActive){
-      if(!safeUnlocked){
-        hintMsg="Find the safe first."; hintTimer=2500;
-      } else {
-        notebookOpen?closeNotebook():openNotebook();
-      }
+    if(gameState==='inside'&&!inspectOpen&&!scareActive&&!hidingInCabinet){
+      if(!safeUnlocked){ hintMsg='Find the safe first.'; hintTimer=2500; }
+      else { notebookOpen?closeNotebook():openNotebook(); }
     }
-  },{passive:false});
+  });
 
-  // USE / interact button
-  document.getElementById('mob-use').addEventListener('touchstart',e=>{
+  document.getElementById('mob-use').addEventListener('pointerdown',e=>{
     e.preventDefault(); e.stopPropagation();
     initAudio(); resumeAudio();
-    // Simulate E key press
     const ev=new KeyboardEvent('keydown',{code:'KeyE',bubbles:true});
     document.dispatchEvent(ev);
-    setTimeout(()=>{ const ev2=new KeyboardEvent('keyup',{code:'KeyE',bubbles:true}); document.dispatchEvent(ev2); },80);
-  },{passive:false});
+    setTimeout(()=>{ document.dispatchEvent(new KeyboardEvent('keyup',{code:'KeyE',bubbles:true})); },80);
+  });
 }
 
 // ── MOBILE START BUTTON ───────────────────────────────────────────────────────
@@ -1122,7 +1203,7 @@ function saveState(){
     px:player.x,py:player.y,angle:player.angle,
     foundWords,selWords,sentenceDone,finalChoice,
     scaresFired:[...scaresFired],gameState,
-    hasKey,safeUnlocked
+    hasKey,safeUnlocked,level,familyFound,doorsOpen:[...doorsOpen]
   }));
 }
 function loadState(){
@@ -1134,6 +1215,8 @@ function loadState(){
     selWords=s.selWords??[]; sentenceDone=s.sentenceDone??false;
     finalChoice=s.finalChoice??null;
     hasKey=s.hasKey??false; safeUnlocked=s.safeUnlocked??false;
+    level=s.level??1; familyFound=s.familyFound??[];
+    doorsOpen=new Set(s.doorsOpen??[]);
     if(s.gameState==='inside'){ gameState='inside'; approachProgress=1; }
   }catch{}
 }
@@ -1175,6 +1258,103 @@ function enterFromCutscene(){
 }
 document.getElementById('cutscene-continue').addEventListener('click',enterFromCutscene);
 document.getElementById('skip-cutscene').addEventListener('click',enterFromCutscene);
+
+// ── LEVEL 2 — INTRO CUTSCENE ──────────────────────────────────────────────────
+function showLevel2Intro(){
+  gameState='cutscene';
+  document.exitPointerLock();
+  document.getElementById('level2-intro').classList.add('active');
+  const el=document.getElementById('level2-intro-lines');
+  el.innerHTML='';
+  const lines=[
+    {text:'You press your back against the cold wall.',cls:'cs-mid',delay:500},
+    {text:'The voices stop.',cls:'cs-big',delay:2400},
+    {text:'.',cls:'cs-mid',delay:4400},
+    {text:'..',cls:'cs-mid',delay:5400},
+    {text:'Then — a sound. Small. Far away.',cls:'cs-mid',delay:7000},
+    {text:'A door, creaking open somewhere upstairs.',cls:'cs-mid',delay:9200},
+    {text:'You can\'t leave them down there. Not like this.',cls:'cs-big',delay:11600},
+    {text:'[ LEVEL 2 ]',cls:'cs-tag',delay:14400},
+    {text:'FIND YOUR FAMILY',cls:'cs-red',delay:15800},
+  ];
+  lines.forEach(({text,cls,delay})=>{
+    const p=document.createElement('p');
+    p.className=`cs-line ${cls}`; p.textContent=text;
+    p.style.animationDelay=delay+'ms';
+    el.appendChild(p);
+  });
+  const lastDelay=lines[lines.length-1].delay;
+  const btn=document.getElementById('level2-intro-btn');
+  btn.style.display='none';
+  btn.style.animationDelay='0s';
+  setTimeout(()=>{ btn.style.display='block'; },lastDelay+2000);
+
+  if(ac){
+    setTimeout(()=>{ noise(3.5,0.18,20,80); },4400);
+    setTimeout(()=>{ tone(196,2.0,0.10,'sine'); },9200);
+  }
+}
+function enterLevel2(){
+  document.getElementById('level2-intro').classList.remove('active');
+  level=2; familyFound=[]; doorsOpen=new Set();
+  player.x=13.5; player.y=12.5; player.angle=Math.PI;
+  hidingInCabinet=false; nearbyCabinet=false; nearbyDoor=null;
+  ceilingPhase='idle'; ceilingPhaseTimer=0;
+  ceilingNextIn=16000+Math.random()*9000; ceilingFlashWhite=0;
+  callerActive=false; callerCooldown=4000; callerInsideTime=0;
+  whisperTimer=0; whisperText='';
+  scaresFired=new Set(); scareActive=false; scareCooldown=3000; postScareRed=0;
+  flashlightOn=true; controlsTimer=0;
+  gameState='inside'; lockPointer(); saveState();
+}
+document.getElementById('level2-intro-btn').addEventListener('click',enterLevel2);
+document.getElementById('skip-level2-intro').addEventListener('click',enterLevel2);
+
+// ── LEVEL 2 — ENDING CUTSCENE (the monster awakens) ───────────────────────────
+function showLevel2End(){
+  gameState='cutscene';
+  document.exitPointerLock();
+  document.getElementById('level2-end').classList.add('active');
+  const el=document.getElementById('level2-end-lines');
+  el.innerHTML='';
+  const lines=[
+    {text:'Your family huddles together in the hallway.',cls:'cs-mid',delay:500},
+    {text:'For a moment — just a moment — it feels safe.',cls:'cs-big',delay:2600},
+    {text:'Then the lights die. All of them. At once.',cls:'cs-mid',delay:5000},
+    {text:'A low groan rolls through the walls.',cls:'cs-mid',delay:7400},
+    {text:'Something underneath the house has heard you.',cls:'cs-big',delay:9800},
+    {text:'It is awake now.',cls:'cs-big',delay:12400},
+    {text:'And it is coming up the stairs.',cls:'cs-mid',delay:14800},
+    {text:'TO BE CONTINUED...',cls:'cs-red',delay:18000},
+  ];
+  lines.forEach(({text,cls,delay})=>{
+    const p=document.createElement('p');
+    p.className=`cs-line ${cls}`; p.textContent=text;
+    p.style.animationDelay=delay+'ms';
+    el.appendChild(p);
+  });
+  const lastDelay=lines[lines.length-1].delay;
+  const btn=document.getElementById('level2-end-btn');
+  btn.style.display='none';
+  btn.style.animationDelay='0s';
+  setTimeout(()=>{ btn.style.display='block'; },lastDelay+2200);
+
+  if(ac){
+    setTimeout(()=>{ noise(4.0,0.35,15,60); },5000);
+    setTimeout(()=>{ noise(5.0,0.55,10,40); },9800);
+    setTimeout(()=>{ tone(50,3.0,0.4,'sawtooth'); },12400);
+    setTimeout(()=>{ noise(6.0,0.7,8,30); },14800);
+  }
+}
+document.getElementById('level2-end-btn').addEventListener('click',()=>{
+  localStorage.removeItem('hb_save'); location.reload();
+});
+document.getElementById('skip-level2-end').addEventListener('click',()=>{
+  document.querySelectorAll('#level2-end-lines .cs-line').forEach(p=>{
+    p.style.animation='none'; p.style.opacity='1';
+  });
+  document.getElementById('level2-end-btn').style.display='block';
+});
 
 document.getElementById('skip-reveal').addEventListener('click',()=>{
   document.getElementById('reveal').classList.remove('active');
@@ -1266,6 +1446,27 @@ function roomTint(mx,my){
   if(mx<=8)  return [0.58,0.52,0.42];  // Sitting Room — dim
   if(mx<=17) return [0.25,0.25,0.30];  // Basement — near black cold
   return [0.78,0.58,0.28];             // Kitchen — warm amber stone
+}
+
+// Closed Level-2 bedroom/basement door — warm wood panels with an iron handle
+function doorTexColor(u,v){
+  if(u<0.045||u>0.955||v<0.025) return [38,27,18];           // dark frame
+  let r=102,g=74,b=47;                                        // stile/rail wood
+  if(((u*48)|0)%6===0){ r-=12;g-=9;b-=6; }                    // vertical grain
+  const inPanel1=u>0.13&&u<0.87&&v>0.10&&v<0.46;
+  const inPanel2=u>0.13&&u<0.87&&v>0.52&&v<0.94;
+  if(inPanel1||inPanel2){
+    const pv=inPanel1?(v-0.10)/0.36:(v-0.52)/0.42;
+    const pu=(u-0.13)/0.74;
+    if(pu<0.06||pu>0.94||pv<0.06||pv>0.94){ r=52;g=38;b=25; } // recessed panel border
+    else{
+      r=132;g=98;b=60;
+      if(((pu*14)|0)%2===0){ r-=10;g-=8;b-=5; }               // panel grain stripes
+    }
+  }
+  const dx=u-0.84, dy=v-0.55;                                 // iron handle
+  if(dx*dx+dy*dy<0.0018){ r=205;g=178;b=92; }
+  return [r,g,b];
 }
 
 function currentRoom(){
@@ -1377,10 +1578,22 @@ function renderWalls(ts){
     const br=Math.max(0,Math.min(2.0,(1-dist/22)*flickerVal*dim*flashMul));
     const texCol=texX*3;
     const[tr,tg,tb]=roomTint(mx,my);
+    // Closed Level-2 family doors render as a distinct wooden door, not brick
+    let isClosedDoor=false;
+    if(level===2){
+      for(const f of FAMILY_MEMBERS){
+        if(f.doorX===mx&&f.doorY===my&&!doorsOpen.has(f.name)){ isClosedDoor=true; break; }
+      }
+    }
     for(let y=top;y<bot;y++){
       const texY=(~~((y-top)/lineH*TEX))&(TEX-1);
-      const ti=texY*TEX*3+texCol;
-      setPixel(x,y,~~(wallTex[ti]*br*tr),~~(wallTex[ti+1]*br*tg),~~(wallTex[ti+2]*br*tb));
+      if(isClosedDoor){
+        const[dr,dg,db]=doorTexColor(wallX,texY/TEX);
+        setPixel(x,y,~~(dr*br),~~(dg*br),~~(db*br));
+      }else{
+        const ti=texY*TEX*3+texCol;
+        setPixel(x,y,~~(wallTex[ti]*br*tr),~~(wallTex[ti+1]*br*tg),~~(wallTex[ti+2]*br*tb));
+      }
     }
   }
 
@@ -1452,6 +1665,68 @@ function renderSprites(ts){
     return [];
   }
   const labels=[];
+
+  // ── Ceiling light fixtures (hanging lamps mounted on the ceiling) ──
+  {
+    const halfH=H>>1;
+    for(const L of CEILING_LIGHTS){
+      const{tx,ty}=projectSprite(L.x,L.y);
+      if(ty<=0.15)continue;
+      const sx=Math.floor(W/2*(1+tx/ty));
+      if(sx<-40||sx>W+40)continue;
+      const sz=Math.abs(Math.floor(H/ty));
+      const fixW=Math.max(6,Math.floor(sz*0.46));
+      const fixH=Math.max(3,Math.floor(sz*0.16));
+      const halfW=fixW>>1;
+      const botY=Math.min(halfH-1,Math.max(1,halfH-Math.floor(sz*0.05)));
+      const topYf=Math.max(0,botY-fixH);
+      if(topYf>=botY)continue;
+
+      let bulb;
+      if(ceilingPhase==='warning'){
+        const flick=Math.sin(ceilingPhaseTimer*0.045+L.x*1.7)>0;
+        bulb=(flick?1:0.10)*(0.7+0.3*Math.random());
+      } else if(ceilingPhase==='flash'){
+        bulb=1;
+      } else {
+        bulb=0.32+0.05*Math.sin(ts*0.0015+L.x*2.1);
+      }
+
+      const x0=Math.max(0,sx-halfW),x1=Math.min(W-1,sx+halfW);
+      for(let ox=x0;ox<=x1;ox++){
+        if(ty>=zBuf[ox])continue;
+        const u=Math.abs(ox-sx)/(halfW||1);
+        for(let oy=topYf;oy<botY;oy++){
+          const idx=(oy*W+ox)*4;
+          if(u<0.42){
+            const c=Math.floor(40+200*bulb);
+            buf[idx]=c; buf[idx+1]=Math.floor(c*0.94); buf[idx+2]=Math.floor(c*0.72);
+          } else {
+            const f=20+bulb*28;
+            buf[idx]=Math.floor(f); buf[idx+1]=Math.floor(f*0.92); buf[idx+2]=Math.floor(f*0.78);
+          }
+          buf[idx+3]=255;
+        }
+      }
+      // glow spill onto the ceiling beneath the fixture when lit
+      if(bulb>0.45){
+        const glowY1=Math.min(halfH,botY+Math.floor(sz*0.14));
+        const gw=Math.floor(halfW*1.7)||1;
+        for(let ox=Math.max(0,sx-gw);ox<=Math.min(W-1,sx+gw);ox++){
+          if(ty>=zBuf[ox])continue;
+          const u=Math.abs(ox-sx)/gw;
+          if(u>1)continue;
+          for(let oy=botY;oy<glowY1;oy++){
+            const idx=(oy*W+ox)*4;
+            const g=(1-u)*(bulb-0.45)/0.55*0.6;
+            buf[idx]  =Math.min(255,buf[idx]  +Math.floor(190*g));
+            buf[idx+1]=Math.min(255,buf[idx+1]+Math.floor(170*g));
+            buf[idx+2]=Math.min(255,buf[idx+2]+Math.floor(110*g));
+          }
+        }
+      }
+    }
+  }
 
   // ── Word orbs (only visible after notebook found in safe) ──
   if(safeUnlocked){
@@ -1562,6 +1837,97 @@ function renderSprites(ts){
         }
       }
       if(Math.sqrt(sq)<14)labels.push({word:'SAFE',sx,csy:y0+(baseH>>1),sz:baseH,kind:'safe'});
+    }
+  }
+
+  // ── Cabinets (hide-or-die mechanic) ──
+  for(const cb of CABINETS){
+    const{tx,ty}=projectSprite(cb.x,cb.y);
+    if(ty<=0.15)continue;
+    const sx=Math.floor(W/2*(1+tx/ty));
+    if(sx<-80||sx>W+80)continue;
+    const baseH=Math.min(H,Math.abs(Math.floor(H/ty))*0.95)|0;
+    const baseW=Math.max(2,baseH*0.58|0);
+    const halfW=baseW>>1;
+    const csy=(H>>1)+(baseH>>1);
+    const x0=Math.max(0,sx-halfW),x1=Math.min(W-1,sx+halfW);
+    const y0=Math.max(0,csy-baseH),y1=Math.min(H-1,csy);
+    if(y0>=y1||halfW<1)continue;
+    for(let ox=x0;ox<=x1;ox++){
+      if(ty>=zBuf[ox])continue;
+      const u=(ox-sx)/(halfW||1); // -1..1 across cabinet width
+      for(let oy=y0;oy<=y1;oy++){
+        const v=(oy-y0)/(baseH||1); // 0=top .. 1=bottom
+        const idx=(oy*W+ox)*4;
+        const shade=0.34+v*0.16;
+        let r=Math.floor(70*shade),g=Math.floor(46*shade),b=Math.floor(24*shade);
+        // vertical plank seams + center seam between the two doors
+        if(Math.abs(u)<0.03||Math.abs((Math.abs(u)*5)%1-0.5)<0.04){
+          r=Math.floor(r*0.55);g=Math.floor(g*0.55);b=Math.floor(b*0.55);
+        }
+        // top/bottom trim
+        if(v<0.05||v>0.95){r=Math.floor(r*0.6);g=Math.floor(g*0.6);b=Math.floor(b*0.6);}
+        // door handles
+        if(Math.abs(Math.abs(u)-0.18)<0.045&&Math.abs(v-0.5)<0.045){
+          r=Math.floor(160*shade);g=Math.floor(128*shade);b=Math.floor(54*shade);
+        }
+        buf[idx]=r;buf[idx+1]=g;buf[idx+2]=b;buf[idx+3]=255;
+      }
+    }
+  }
+
+  // ── Family members (Level 2 — curled up in fear behind their door) ──
+  if(level===2){
+    for(const f of FAMILY_MEMBERS){
+      if(familyFound.includes(f.name))continue;
+      if(!doorsOpen.has(f.name))continue; // hidden until you open their door
+      const{tx,ty}=projectSprite(f.x,f.y);
+      if(ty<=0.1)continue;
+      const sx=Math.floor(W/2*(1+tx/ty));
+      if(sx<-60||sx>W+60)continue;
+      const fullH=Math.abs(Math.floor(H/ty));
+      const bodyH=Math.min(H-1,fullH*0.50)|0;
+      const figW=Math.max(8,Math.floor(bodyH*0.95));
+      const csy=(H>>1)+(fullH>>1);     // ground level
+      const topY=Math.max(0,csy-bodyH);
+      if(topY>=csy)continue;
+      const tremble=Math.sin(ts*0.014+f.x*3.1)*1.4;
+      const bboxLeft=sx-figW*0.5+tremble;
+      // Curled up, knees pulled to chest, head bowed — someone hiding, scared
+      const CP=[
+        [0.50,0.00],[0.66,0.02],[0.78,0.10],[0.80,0.20],
+        [0.94,0.28],[1.00,0.46],[0.96,0.64],[0.84,0.80],
+        [0.66,0.94],[0.48,1.00],[0.34,0.98],[0.40,0.84],
+        [0.32,0.70],[0.14,0.78],[0.02,0.68],[0.10,0.54],
+        [0.24,0.46],[0.20,0.30],[0.28,0.16],[0.40,0.06]
+      ];
+      const NP=CP.length;
+      const pulse=0.78+0.22*Math.sin(ts*0.004+f.y);
+      const scanL=Math.max(0,Math.floor(bboxLeft));
+      const scanR=Math.min(W-1,Math.floor(bboxLeft+figW));
+      for(let ox=scanL;ox<=scanR;ox++){
+        if(ty>=zBuf[ox])continue;
+        const u=(ox-bboxLeft)/figW;
+        for(let oy=topY;oy<=Math.min(H-1,csy);oy++){
+          const v=(oy-topY)/bodyH;
+          let ins=false;
+          for(let i=0,j=NP-1;i<NP;j=i++){
+            const xi=CP[i][0],yi=CP[i][1],xj=CP[j][0],yj=CP[j][1];
+            if(((yi>v)!==(yj>v))&&(u<(xj-xi)*(v-yi)/(yj-yi)+xi))ins=!ins;
+          }
+          if(!ins)continue;
+          const idx=(oy*W+ox)*4;
+          // pale, frightened figure — warm skin/cloth tones (not the cold Caller palette)
+          buf[idx]  =Math.floor(150*pulse);
+          buf[idx+1]=Math.floor(122*pulse);
+          buf[idx+2]=Math.floor(98*pulse);
+          buf[idx+3]=255;
+          // wide, scared eyes peeking up over drawn-up knees
+          if(v>0.04&&v<0.13&&(Math.abs(u-0.60)<0.045||Math.abs(u-0.72)<0.045)){
+            buf[idx]=Math.floor(225*pulse);buf[idx+1]=Math.floor(232*pulse);buf[idx+2]=Math.floor(240*pulse);
+          }
+        }
+      }
     }
   }
 
@@ -1970,6 +2336,12 @@ function playWordChime(){
   [523,659,784].forEach((f,i)=>tone(f,0.5,0.35,'sine',i*0.11));
 }
 
+function playDoorCreak(){
+  noise(0.9,0.16,250,1100);
+  tone(140,0.7,0.05,'sawtooth');
+  tone(95,0.5,0.04,'sawtooth',0.18);
+}
+
 function playScareSting(){
   // Loud static burst + distorted scream
   noise(0.04,5.0,60,9000);             // instant wide-band impact
@@ -2138,7 +2510,7 @@ function move(dt){
     return;
   }
   if(gameState!=='inside'&&gameState!=='escape')return;
-  if(gameState==='inside'&&(inspectOpen||scareActive||notebookOpen))return;
+  if(gameState==='inside'&&(inspectOpen||scareActive||notebookOpen||hidingInCabinet))return;
   if(mouseX){player.angle+=mouseX*0.0022;mouseX=0;}
   if(keys['ArrowLeft']||keys['KeyQ'])player.angle-=ROT_SPEED;
   if(keys['ArrowRight'])             player.angle+=ROT_SPEED;
@@ -2186,7 +2558,7 @@ function triggerScare(){
   callerFrequency=Math.min(4.0,callerFrequency+0.6);
 }
 function checkScares(dt){
-  if(inspectOpen)return;
+  if(inspectOpen||hidingInCabinet)return;
   if(scareCooldown>0){scareCooldown-=dt;return;}
   if(scareActive)return;
   for(let i=0;i<SCARE_ZONES.length;i++){
@@ -2197,6 +2569,50 @@ function checkScares(dt){
   if(stillTimer>10000){stillTimer=0;triggerScare();}
 }
 
+// ── CEILING LIGHT FLASH LOGIC ─────────────────────────────────────────────────
+// idle → warning (lights flicker, get to a cabinet!) → flash (resolved)
+function updateCeilingLight(dt){
+  if(inspectOpen||notebookOpen||scareActive||timerJSActive)return;
+
+  if(ceilingPhase==='idle'){
+    ceilingNextIn-=dt;
+    if(ceilingNextIn<=0){
+      ceilingPhase='warning'; ceilingPhaseTimer=0;
+      noise(0.6,1.1,60,360);            // electrical buzz
+      tone(55,1.2,0.8,'sawtooth',0.15); // low ominous hum
+    }
+    return;
+  }
+
+  if(ceilingPhase==='warning'){
+    ceilingPhaseTimer+=dt;
+    if(ceilingPhaseTimer>=CEILING_WARN_MS){
+      if(hidingInCabinet){
+        // Survived — safely hidden when the lights cut out
+        ceilingPhase='flash'; ceilingPhaseTimer=0;
+        noise(0.08,1.8,200,4500); // muffled flash from inside the cabinet
+      } else {
+        // Caught in the open — game over
+        ceilingFlashWhite=1;
+        document.getElementById('gameover-title').textContent='IT FOUND YOU';
+        document.getElementById('gameover-sub').textContent="The lights went out, and you weren't hidden.";
+        callerActive=false; scareActive=false;
+        timerJSActive=true; timerJSFrame=0;
+        resumeAudio(); playTimerJumpscare();
+      }
+    }
+    return;
+  }
+
+  if(ceilingPhase==='flash'){
+    ceilingPhaseTimer+=dt;
+    if(ceilingPhaseTimer>=600){
+      ceilingPhase='idle'; ceilingPhaseTimer=0;
+      ceilingNextIn=18000+Math.random()*12000;
+    }
+  }
+}
+
 // ── THE CALLER LOGIC ──────────────────────────────────────────────────────────
 function distortWord(w){
   const g='▓░█▒▄▀■□';
@@ -2204,6 +2620,7 @@ function distortWord(w){
 }
 
 function updateCaller(dt){
+  if(hidingInCabinet)return;
   callerInsideTime+=dt;
   if(whisperTimer>0) whisperTimer=Math.max(0,whisperTimer-dt);
 
@@ -2368,6 +2785,11 @@ function render(ts){
     ctx.fillStyle=`rgba(255,255,255,${whiteFlash})`; ctx.fillRect(0,0,W,H);
   }
 
+  // ceiling light flash
+  if(ceilingFlashWhite>0){
+    ctx.fillStyle=`rgba(255,255,255,${ceilingFlashWhite})`; ctx.fillRect(0,0,W,H);
+  }
+
   // scare face
   if(scareActive)renderScare();
 
@@ -2440,17 +2862,29 @@ function render(ts){
   }
 
   // interact prompt
-  if(!scareActive&&!inspectOpen){
+  if(!scareActive&&!inspectOpen&&!hidingInCabinet){
     let prompt='';
     if(nearbyKey&&!hasKey)          prompt='[E]  TAKE THE KEY';
     else if(nearbySafe&&!safeUnlocked) prompt=hasKey?'[E]  UNLOCK THE SAFE':'[E]  EXAMINE SAFE';
     else if(nearbyClue&&safeUnlocked)  prompt='[E]  EXAMINE';
+    else if(nearbyFamily)              prompt='[E]  GO TO '+nearbyFamily.label;
+    else if(nearbyDoor)                prompt='[E]  OPEN DOOR';
+    else if(nearbyCabinet)             prompt='[E]  HIDE IN CABINET';
     if(prompt){
       oct.font=`${Math.floor(11*DS)}px 'Special Elite'`;
       oct.textAlign='center'; oct.textBaseline='middle';
       oct.fillStyle='rgba(220,192,96,0.90)';
       oct.fillText(prompt,oc.width/2,oc.height-Math.floor(22*DS));
     }
+  }
+
+  // ── Ceiling lights flickering — get to a cabinet! ──
+  if(ceilingPhase==='warning'&&!scareActive&&!hidingInCabinet){
+    const pulse=0.55+0.45*Math.sin(ts*0.028);
+    oct.font=`bold ${Math.floor(17*DS)}px 'Special Elite'`;
+    oct.textAlign='center'; oct.textBaseline='middle';
+    oct.fillStyle=`rgba(255,70,40,${pulse})`;
+    oct.fillText('THE LIGHTS ARE FAILING — HIDE NOW!',oc.width/2,oc.height*0.16);
   }
 
   // hint message (key pickup, safe feedback)
@@ -2509,14 +2943,23 @@ function render(ts){
 
   // ── Objective banner ──
   if(!scareActive){
-    const n=foundWords.length,total=CLUES.length;
-    const obj=
-      !hasKey       ? '[ OBJECTIVE ]  Find the key — it\'s in the Library (upper-left corner)' :
-      !safeUnlocked ? '[ OBJECTIVE ]  Find the safe in the Basement (lower-middle) — press  E  to unlock' :
-      n===0         ? '[ OBJECTIVE ]  Find all 8 hidden words scattered through the house' :
-      n<total       ? `[ OBJECTIVE ]  Collect hidden words — ${n} of ${total} found  (press  N  for notebook)` :
-                      '[ OBJECTIVE ]  All words found — open notebook  [ N ]  and arrange the sentence';
-    const urgent=n===total||(!hasKey);
+    let obj,urgent;
+    if(level===2){
+      const fn=familyFound.length,ftotal=FAMILY_MEMBERS.length;
+      obj=fn>=ftotal
+        ? '[ OBJECTIVE ]  Everyone is safe... for now.'
+        : `[ OBJECTIVE ]  Search the house and find your family — ${fn} of ${ftotal} found`;
+      urgent=fn>=ftotal;
+    }else{
+      const n=foundWords.length,total=CLUES.length;
+      obj=
+        !hasKey       ? '[ OBJECTIVE ]  Find the key — it\'s in the Library (upper-left corner)' :
+        !safeUnlocked ? '[ OBJECTIVE ]  Find the safe in the Basement (lower-middle) — press  E  to unlock' :
+        n===0         ? '[ OBJECTIVE ]  Find all 8 hidden words scattered through the house' :
+        n<total       ? `[ OBJECTIVE ]  Collect hidden words — ${n} of ${total} found  (press  N  for notebook)` :
+                        '[ OBJECTIVE ]  All words found — open notebook  [ N ]  and arrange the sentence';
+      urgent=n===total||(!hasKey);
+    }
     const col=urgent?'rgba(230,205,110,0.95)':'rgba(200,180,120,0.80)';
     const barH=Math.floor(30*DS);
     oct.fillStyle='rgba(0,0,0,0.72)'; oct.fillRect(0,0,oc.width,barH);
@@ -2570,6 +3013,7 @@ function render(ts){
       'M — Toggle map',
       'F — Flashlight',
       'Shift — Sprint',
+      'If the lights flicker — hide in a cabinet!',
     ];
     const lh=Math.floor(18*DS), pad=Math.floor(14*DS);
     const bh=lines.length*lh+pad*2;
@@ -2589,6 +3033,26 @@ function render(ts){
     oct.fillStyle=`rgba(140,115,60,${a*0.65})`;
     oct.textAlign='center';
     oct.fillText('CONTROLS',bx+bw/2,by+Math.floor(7*DS));
+  }
+
+  // ── Hiding inside a cabinet — covers the view with slats of light ──
+  if(hidingInCabinet){
+    ctx.fillStyle='rgba(2,2,2,0.95)'; ctx.fillRect(0,0,W,H);
+    const slatGlow = ceilingPhase==='flash' ? 0.95
+      : ceilingPhase==='warning' ? (0.08+0.20*Math.abs(Math.sin(ts*0.02)))
+      : 0.05;
+    const slats=5;
+    for(let i=0;i<slats;i++){
+      const sy=Math.floor((i+1)*H/(slats+1));
+      const sh=Math.max(2,Math.floor(H*0.012));
+      ctx.fillStyle=`rgba(255,248,225,${slatGlow})`;
+      ctx.fillRect(0,sy,W,sh);
+    }
+    oct.clearRect(0,0,oc.width,oc.height);
+    oct.font=`${Math.floor(16*DS)}px 'Special Elite'`;
+    oct.textAlign='center'; oct.textBaseline='middle';
+    oct.fillStyle='rgba(205,185,125,0.85)';
+    oct.fillText('HIDING — press [ E ] to come out',oc.width/2,oc.height-Math.floor(34*DS));
   }
 }
 
@@ -2650,7 +3114,7 @@ function updateEscape(dt){
     escapeWon=true;
     document.getElementById('escape-restart-btn').style.display='none';
     document.exitPointerLock();
-    setTimeout(()=>{ gameState='inside'; showEnding(ENDING_OBEY); },600);
+    setTimeout(()=>{ gameState='inside'; showLevel2Intro(); },600);
   }
 }
 
@@ -2805,7 +3269,7 @@ function loop(ts){
   }
 
   // ── inside ──
-  if(!timerActive&&gameState==='inside') timerActive=true;
+  if(!timerActive&&gameState==='inside'&&level===1) timerActive=true;
   if(controlsTimer>0) controlsTimer=Math.max(0,controlsTimer-dt);
   move(dt);
 
@@ -2859,6 +3323,31 @@ function loop(ts){
     if(dx*dx+dy*dy<2.25) nearbySafe=true;
   }
 
+  nearbyCabinet=false;
+  for(const cb of CABINETS){
+    const dx=cb.x-player.x,dy=cb.y-player.y;
+    if(dx*dx+dy*dy<2.25){nearbyCabinet=true;break;}
+  }
+
+  nearbyDoor=null;
+  if(level===2){
+    for(const f of FAMILY_MEMBERS){
+      if(doorsOpen.has(f.name))continue;
+      const dx=(f.doorX+0.5)-player.x,dy=(f.doorY+0.5)-player.y;
+      if(dx*dx+dy*dy<2.25){nearbyDoor=f;break;}
+    }
+  }
+
+  nearbyFamily=null;
+  if(level===2){
+    for(const f of FAMILY_MEMBERS){
+      if(familyFound.includes(f.name))continue;
+      if(!doorsOpen.has(f.name))continue;
+      const dx=f.x-player.x,dy=f.y-player.y;
+      if(dx*dx+dy*dy<2.25){nearbyFamily=f;break;}
+    }
+  }
+
   if(hintTimer>0) hintTimer=Math.max(0,hintTimer-dt);
 
   // Nudge hint if player has been lost for a while
@@ -2887,6 +3376,7 @@ function loop(ts){
 
   updateCaller(dt);
   checkScares(dt);
+  updateCeilingLight(dt);
 
   if(scareActive){
     scareFrame++;
@@ -2894,6 +3384,7 @@ function loop(ts){
   }
   if(postScareRed>0)postScareRed=Math.max(0,postScareRed-dt/2000);
   if(whiteFlash>0)  whiteFlash  =Math.max(0,whiteFlash  -dt/400);
+  if(ceilingFlashWhite>0) ceilingFlashWhite=Math.max(0,ceilingFlashWhite-dt/250);
 
   render(ts);
 
